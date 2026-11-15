@@ -46,6 +46,7 @@ export interface TimeFrame {
   readonly triggerIntensity: number;
   readonly accent: number;
   readonly stepIndex: number;
+  readonly pulseSlope?: number;
 }
 
 export interface MutableTimeFrame {
@@ -54,6 +55,7 @@ export interface MutableTimeFrame {
   triggerIntensity: number;
   accent: number;
   stepIndex: number;
+  pulseSlope: number;
 }
 
 export interface TimeOperatorModule extends ModuleDescriptor {

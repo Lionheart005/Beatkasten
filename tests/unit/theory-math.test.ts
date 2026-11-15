@@ -6,7 +6,10 @@ import {
   interferenceEnergy,
   phaseDriftOffset,
   warpPhase,
+  wrapPhase01,
 } from '../../src/core/math';
+import type { MutableTimeFrame, TimeEvalContext } from '../../src/core/registry/types';
+import { timePulseInterferenceOperator } from '../../src/core/time/operators';
 import {
   computeCombinedCycleBeats,
   computeHarmonyFrame,
@@ -146,6 +149,101 @@ describe('Phase & Time Math', () => {
     expect(pulled).toBeLessThan(0.06);
 
     expect(phaseDriftOffset(10, 0.25, 4)).toBeCloseTo(0.5, 6);
+  });
+
+  it('timePulseInterferenceOperator fires exact on-beat triggers over 2 bars without double-triggers', () => {
+    const sampleRate = 48000;
+    const bpm = 130;
+    const beatsPerBar = 4;
+    const cycleBeats = 4;
+    const subblockSize = 32;
+    const samplesPerBeat = (60 / bpm) * sampleRate;
+    const totalSamples = Math.floor(8 * samplesPerBeat);
+
+    const runTwoBars = (params: Record<string, number>) => {
+      let prevFrame: MutableTimeFrame = {
+        warpedPhase: 0,
+        pulseEnergy: 0,
+        triggerIntensity: 0,
+        accent: 0,
+        stepIndex: -1,
+        pulseSlope: 0,
+      };
+      const triggers: Array<{ beat: number; intensity: number }> = [];
+
+      for (let sample = 0; sample < totalSamples; sample += subblockSize) {
+        const beatPosition = sample / samplesPerBeat;
+        const layerPhase = wrapPhase01(beatPosition / cycleBeats);
+        const ctx: TimeEvalContext = {
+          beatPosition,
+          barPosition: beatPosition / beatsPerBar,
+          layerPhase,
+          cycleIndex: Math.floor(beatPosition / cycleBeats),
+          cycleBeats,
+          beatsPerBar,
+          sampleRate,
+        };
+        const inFrame: MutableTimeFrame = {
+          warpedPhase: layerPhase,
+          pulseEnergy: prevFrame.pulseEnergy,
+          triggerIntensity: 0,
+          accent: prevFrame.accent,
+          stepIndex: prevFrame.stepIndex,
+          pulseSlope: prevFrame.pulseSlope,
+        };
+        const outFrame: MutableTimeFrame = {
+          warpedPhase: 0,
+          pulseEnergy: 0,
+          triggerIntensity: 0,
+          accent: 0,
+          stepIndex: 0,
+          pulseSlope: 0,
+        };
+        timePulseInterferenceOperator.evaluateTimeInto!(ctx, params, inFrame, outFrame);
+
+        expect(outFrame.pulseEnergy).toBeGreaterThanOrEqual(0);
+        expect(outFrame.pulseEnergy).toBeLessThanOrEqual(1);
+
+        if (outFrame.triggerIntensity > 0) {
+          triggers.push({ beat: beatPosition, intensity: outFrame.triggerIntensity });
+        }
+        prevFrame = outFrame;
+      }
+      return triggers;
+    };
+
+    for (const threshold of [0, 0.5]) {
+      const triggers = runTwoBars({
+        freqA: 4,
+        freqB: 4,
+        interferenceMix: 0,
+        phaseOffset: 0,
+        threshold,
+      });
+
+      expect(triggers).toHaveLength(8);
+      for (let i = 0; i < 8; i += 1) {
+        expect(Math.abs(triggers[i]!.beat - i)).toBeLessThan(0.002);
+        expect(triggers[i]!.intensity).toBeGreaterThan(0.99);
+        expect(triggers[i]!.intensity).toBeLessThanOrEqual(1);
+      }
+      const intensities = triggers.map((t) => t.intensity);
+      expect(Math.max(...intensities) - Math.min(...intensities)).toBeLessThan(0.005);
+    }
+
+    const interferenceTriggers = runTwoBars({
+      freqA: 4,
+      freqB: 3,
+      interferenceMix: 0.5,
+      phaseOffset: 0.125,
+      threshold: 0.2,
+    });
+    expect(interferenceTriggers.length).toBeGreaterThan(0);
+    for (const trig of interferenceTriggers) {
+      expect(Number.isFinite(trig.intensity)).toBe(true);
+      expect(trig.intensity).toBeGreaterThan(0);
+      expect(trig.intensity).toBeLessThanOrEqual(1);
+    }
   });
 });
 

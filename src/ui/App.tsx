@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ExportModal } from './components/ExportModal';
 import { PhaseRadarCanvas } from './components/PhaseRadarCanvas';
 import { ProjectModal } from './components/ProjectModal';
-import { WaveformScopeCanvas } from './components/WaveformScopeCanvas';
+import { TimePreviewCanvas } from './components/TimePreviewCanvas';
 import { LayerInspector } from './panels/LayerInspector';
 import { LayerStackPanel } from './panels/LayerStackPanel';
 import { SectionsAndHistoryPanel } from './panels/SectionsAndHistoryPanel';
@@ -75,7 +75,7 @@ export function App() {
         onOpenExportModal={() => setIsExportOpen(true)}
       />
 
-      {/* Visual Center: Phase Radar + Stereo Oscilloscope */}
+      {/* Visual Center: Phase Radar + Layer Wave Preview */}
       <section className="visual-center">
         <PhaseRadarCanvas
           layers={store.snapshot.layers}
@@ -85,10 +85,23 @@ export function App() {
           isPlaying={store.isPlaying}
           onSelectLayer={store.setSelectedLayerId}
         />
-        <WaveformScopeCanvas
-          telemetry={store.telemetry}
-          isPlaying={store.isPlaying}
-        />
+        <div className="visual-card">
+          {store.selectedLayer ? (
+            <TimePreviewCanvas
+              layer={store.selectedLayer}
+              beatsPerBar={store.snapshot.timeSignature.numerator}
+              currentPhase={currentLayerPhase}
+              height={84}
+              showHeader
+              isPlaying={store.isPlaying}
+              peakLevel={store.telemetry.peakLevel}
+            />
+          ) : (
+            <div className="muted-note">
+              Kein Layer ausgewählt — wähle links einen Layer für die Wellenfunktion.
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Main 3-Area Workspace */}
@@ -108,8 +121,6 @@ export function App() {
           layer={store.selectedLayer}
           allLayers={store.snapshot.layers}
           curves={store.snapshot.curves}
-          beatsPerBar={store.snapshot.timeSignature.numerator}
-          currentLayerPhase={currentLayerPhase}
           selectedCurveId={store.selectedCurveId}
           activeModTarget={store.activeModTarget}
           hoveredModSourceId={store.hoveredModSourceId}

@@ -1,21 +1,65 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { defaultRegistry } from '../../core/defaultRegistry';
 import type { TimeFrame } from '../../core/registry/types';
 import type { LayerConfig } from '../../core/state/types';
 import { cycleToBeats } from '../../core/theory/cycles';
 
+type PreviewTimeFrame = TimeFrame & { readonly pulseSlope?: number };
+
 interface TimePreviewCanvasProps {
   layer: LayerConfig;
   beatsPerBar: number;
   currentPhase?: number;
+  height?: number;
+  showHeader?: boolean;
+  isPlaying?: boolean;
+  peakLevel?: number;
+}
+
+function formatCycleReadout(cycleBeats: number, beatsPerBar: number): string {
+  const safeBeatsPerBar = Math.max(1, beatsPerBar);
+  const bars = cycleBeats / safeBeatsPerBar;
+  if (cycleBeats >= safeBeatsPerBar && Math.abs(bars - Math.round(bars)) < 1e-6) {
+    const wholeBars = Math.round(bars);
+    return `${wholeBars} ${wholeBars === 1 ? 'Takt' : 'Takte'}`;
+  }
+  const formattedBeats = Number.isInteger(cycleBeats)
+    ? String(cycleBeats)
+    : cycleBeats.toFixed(1);
+  return `${formattedBeats} Beats`;
 }
 
 export function TimePreviewCanvas({
   layer,
   beatsPerBar,
   currentPhase = 0,
+  height = 84,
+  showHeader = false,
+  isPlaying = false,
+  peakLevel = 0,
 }: TimePreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvasWidth, setCanvasWidth] = useState(0);
+
+  const cycleBeats = cycleToBeats(
+    layer.cycleLength.value,
+    layer.cycleLength.unit,
+    beatsPerBar,
+  );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const nextWidth = Math.round(entry.contentRect.width);
+        setCanvasWidth((prev) => (prev !== nextWidth ? nextWidth : prev));
+      }
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -24,39 +68,37 @@ export function TimePreviewCanvas({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth || 260;
-    const height = 62;
-    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    const width = canvas.clientWidth || canvasWidth || 260;
+    if (
+      canvas.width !== Math.round(width * dpr) ||
+      canvas.height !== Math.round(height * dpr)
+    ) {
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
     }
 
-    const cycleBeats = cycleToBeats(
-      layer.cycleLength.value,
-      layer.cycleLength.unit,
-      beatsPerBar,
-    );
-
-    const samples = 96;
+    const samples = 256;
     const energies = new Float32Array(samples);
     const triggers = new Float32Array(samples);
 
-    let prevFrame: TimeFrame = {
+    let prevFrame: PreviewTimeFrame = {
       warpedPhase: 0,
       pulseEnergy: 0,
       triggerIntensity: 0,
       accent: 0,
       stepIndex: -1,
+      pulseSlope: 0,
     };
 
     for (let i = 0; i < samples; i++) {
       const p = i / samples;
-      let frame: TimeFrame = {
+      let frame: PreviewTimeFrame = {
         warpedPhase: p,
         pulseEnergy: prevFrame.pulseEnergy,
         triggerIntensity: 0,
         accent: 0,
         stepIndex: prevFrame.stepIndex,
+        pulseSlope: prevFrame.pulseSlope ?? 0,
       };
       for (const opCfg of layer.timeOperators) {
         if (opCfg.bypassed) continue;
@@ -128,7 +170,7 @@ export function TimePreviewCanvas({
     for (let i = 0; i < samples; i++) {
       const t = triggers[i] ?? 0;
       if (t > 0.05) {
-        const x = (i / (samples - 1)) * width;
+        const x = Math.max(1, Math.min(width - 1, (i / (samples - 1)) * width));
         const yTop = height - 4 - t * (height - 10);
         ctx.beginPath();
         ctx.moveTo(x, height - 4);
@@ -147,14 +189,71 @@ export function TimePreviewCanvas({
     ctx.stroke();
 
     ctx.restore();
-  }, [beatsPerBar, currentPhase, layer.color, layer.cycleLength, layer.timeOperators]);
+  }, [
+    beatsPerBar,
+    canvasWidth,
+    currentPhase,
+    cycleBeats,
+    height,
+    layer.color,
+    layer.timeOperators,
+  ]);
 
-  return (
+  const canvasElement = (
     <canvas
       ref={canvasRef}
       className="canvas-box"
-      style={{ height: 62 }}
+      style={{ height }}
       title="Rhythmus-Vorschau über einen vollen Layer-Zyklus"
     />
+  );
+
+  if (!showHeader) {
+    return canvasElement;
+  }
+
+  return (
+    <div className="scope-wrap">
+      <div className="scope-header">
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: layer.color,
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontWeight: 600,
+              color: '#eef2f9',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            Wellenfunktion · {layer.name}
+          </span>
+          <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+            · {formatCycleReadout(cycleBeats, beatsPerBar)}
+          </span>
+        </span>
+        <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {isPlaying
+            ? `Pegel ${(peakLevel * 100).toFixed(0)} % · Playhead aktiv`
+            : 'Bereit — Play drücken'}
+        </span>
+      </div>
+      {canvasElement}
+    </div>
   );
 }

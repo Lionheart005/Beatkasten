@@ -1,6 +1,7 @@
 import {
   gridGravityPull,
   interferenceEnergy,
+  interferenceSlope,
   phaseDriftOffset,
   warpPhase,
   wrapPhase01,
@@ -54,6 +55,7 @@ export const timeWarpOperator: TimeOperatorModule = {
     outFrame.triggerIntensity = prevFrame.triggerIntensity;
     outFrame.accent = prevFrame.accent;
     outFrame.stepIndex = prevFrame.stepIndex;
+    outFrame.pulseSlope = prevFrame.pulseSlope ?? 0;
   },
   evaluateTime(
     ctx: TimeEvalContext,
@@ -66,6 +68,7 @@ export const timeWarpOperator: TimeOperatorModule = {
       triggerIntensity: 0,
       accent: 0,
       stepIndex: 0,
+      pulseSlope: 0,
     };
     this.evaluateTimeInto!(ctx, params, prevFrame, out);
     return out;
@@ -104,7 +107,7 @@ const GRAVITY_PARAM: ParameterSchema = {
   domain: 'time',
   min: 0,
   max: 1,
-  defaultValue: 0.35,
+  defaultValue: 0,
   curve: 'linear',
   modulatable: true,
 };
@@ -135,6 +138,7 @@ export const timeGridGravityOperator: TimeOperatorModule = {
     outFrame.triggerIntensity = prevFrame.triggerIntensity;
     outFrame.accent = prevFrame.accent;
     outFrame.stepIndex = prevFrame.stepIndex;
+    outFrame.pulseSlope = prevFrame.pulseSlope ?? 0;
   },
   evaluateTime(
     ctx: TimeEvalContext,
@@ -147,6 +151,7 @@ export const timeGridGravityOperator: TimeOperatorModule = {
       triggerIntensity: 0,
       accent: 0,
       stepIndex: 0,
+      pulseSlope: 0,
     };
     this.evaluateTimeInto!(ctx, params, prevFrame, out);
     return out;
@@ -198,6 +203,7 @@ export const timePhaseDriftOperator: TimeOperatorModule = {
     outFrame.triggerIntensity = prevFrame.triggerIntensity;
     outFrame.accent = prevFrame.accent;
     outFrame.stepIndex = prevFrame.stepIndex;
+    outFrame.pulseSlope = prevFrame.pulseSlope ?? 0;
   },
   evaluateTime(
     ctx: TimeEvalContext,
@@ -210,6 +216,7 @@ export const timePhaseDriftOperator: TimeOperatorModule = {
       triggerIntensity: 0,
       accent: 0,
       stepIndex: 0,
+      pulseSlope: 0,
     };
     this.evaluateTimeInto!(ctx, params, prevFrame, out);
     return out;
@@ -237,19 +244,19 @@ const FREQ_B_PARAM: ParameterSchema = {
   min: 1,
   max: 16,
   step: 1,
-  defaultValue: 3,
+  defaultValue: 4,
   curve: 'linear',
   modulatable: false,
 };
 
 const INTERFERENCE_MIX_PARAM: ParameterSchema = {
   id: 'interferenceMix',
-  label: 'Wellen-Mischung',
-  description: 'Balance zwischen Grundpuls A und Gegenwelle B.',
+  label: 'Welle B Anteil',
+  description: '0 = Welle B aus (absolut gerader Grundpuls A), > 0 = mischt Gegenwelle B ein.',
   domain: 'time',
   min: 0,
   max: 1,
-  defaultValue: 0.45,
+  defaultValue: 0,
   curve: 'linear',
   modulatable: true,
 };
@@ -261,7 +268,7 @@ const PHASE_OFFSET_PARAM: ParameterSchema = {
   domain: 'time',
   min: 0,
   max: 1,
-  defaultValue: 0.125,
+  defaultValue: 0,
   curve: 'linear',
   modulatable: true,
 };
@@ -269,11 +276,11 @@ const PHASE_OFFSET_PARAM: ParameterSchema = {
 const THRESHOLD_PARAM: ParameterSchema = {
   id: 'threshold',
   label: 'Auslöse-Schwelle',
-  description: 'Bestimmt, wie spitz oder breit die einzelnen Impulse aus der Welle ragen.',
+  description: '0 = alle Wellen-Gipfel lösen aus; höhere Werte filtern leise Nebenimpulse heraus.',
   domain: 'time',
-  min: 0.05,
+  min: 0,
   max: 0.92,
-  defaultValue: 0.42,
+  defaultValue: 0,
   curve: 'linear',
   modulatable: true,
 };
@@ -312,35 +319,31 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
       threshold,
     );
     const stepIndex = Math.floor(p * freqA);
+    const currSlope = interferenceSlope(p, freqA, freqB, mix, phaseOffset);
     const rawAccent = pulseEnergy * (1 - 0.3 * Math.abs(Math.sin(Math.PI * p)));
     const accent = rawAccent < 0 ? 0 : rawAccent > 1 ? 1 : rawAccent;
 
-    const crossedThreshold = pulseEnergy > 0.12 && prevFrame.pulseEnergy <= 0.12;
-    const steppedInEnergy = prevFrame.stepIndex !== stepIndex && pulseEnergy > 0.08;
-
     let triggerIntensity = 0;
-    if (crossedThreshold || steppedInEnergy) {
-      // Look slightly ahead within the current lobe so smooth sine rising edges
-      // report musical peak velocity rather than just the threshold crossing value.
-      const lobeStep = 1 / freqA;
-      const ahead1 = interferenceEnergy(
-        p + lobeStep * 0.14,
-        freqA,
-        freqB,
-        mix,
-        phaseOffset,
-        threshold,
-      );
-      const ahead2 = interferenceEnergy(
-        p + lobeStep * 0.25,
-        freqA,
-        freqB,
-        mix,
-        phaseOffset,
-        threshold,
-      );
-      const peak = Math.max(pulseEnergy, ahead1, ahead2);
-      triggerIntensity = peak < 0 ? 0 : peak > 1 ? 1 : peak;
+    if (mix <= 0.0001) {
+      // Pure Wave A: exact cosine peaks sit at p = k / freqA where stepIndex advances.
+      if (stepIndex !== prevFrame.stepIndex && pulseEnergy > 0.01) {
+        triggerIntensity = pulseEnergy;
+      }
+    } else {
+      // Interference active: trigger at local wave crests (slope crossing + -> -) above threshold.
+      const prevSlope =
+        prevFrame.stepIndex < 0
+          ? interferenceSlope(
+              wrapPhase01(p - 0.002),
+              freqA,
+              freqB,
+              mix,
+              phaseOffset,
+            )
+          : (prevFrame.pulseSlope ?? 0);
+      if (prevSlope >= 0 && currSlope < 0 && pulseEnergy > 0.02) {
+        triggerIntensity = pulseEnergy;
+      }
     }
 
     outFrame.warpedPhase = p;
@@ -348,6 +351,7 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
     outFrame.triggerIntensity = triggerIntensity;
     outFrame.accent = accent;
     outFrame.stepIndex = stepIndex;
+    outFrame.pulseSlope = currSlope;
   },
   evaluateTime(
     ctx: TimeEvalContext,
@@ -360,6 +364,7 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
       triggerIntensity: 0,
       accent: 0,
       stepIndex: 0,
+      pulseSlope: 0,
     };
     this.evaluateTimeInto!(ctx, params, prevFrame, out);
     return out;

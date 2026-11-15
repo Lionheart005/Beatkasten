@@ -28,8 +28,9 @@ export function warpPhase(phase01: number, warpAmount: number): number {
 }
 
 /**
- * Computes normalized interference energy in [0, 1] from two phase-locked oscillators
+ * Computes normalized interference energy in [0, 1] from two phase-locked cosine oscillators
  * with frequencies freqA and freqB, blend mix, phaseOffset, and threshold gate.
+ * Cosine alignment places beat 1 (p = 0) and every k / freqA subdivision at peak +1.0.
  */
 export function interferenceEnergy(
   phase01: number,
@@ -46,12 +47,42 @@ export function interferenceEnergy(
   const m = clamp01(mix);
   const thresh = clamp01(threshold);
 
-  const a = Math.sin(TWO_PI * (p * fA));
-  const b = Math.sin(TWO_PI * (p * fB + offset));
-  const unipolar = clamp01(0.5 * ((1 - m) * a + m * b + 1));
+  const a = Math.cos(TWO_PI * (p * fA));
+  const unipolar =
+    m <= 0.0001
+      ? clamp01(0.5 * (a + 1))
+      : clamp01(
+          0.5 * ((1 - m) * a + m * Math.cos(TWO_PI * (p * fB - offset)) + 1),
+        );
 
   if (thresh >= 0.9999) return 0;
   return clamp01((unipolar - thresh) / (1 - thresh));
+}
+
+/**
+ * Computes the analytical derivative of the unipolar interference wave with respect
+ * to phase01 (up to a positive constant PI) for zero-crossing peak detection.
+ */
+export function interferenceSlope(
+  phase01: number,
+  freqA: number,
+  freqB: number,
+  mix: number,
+  phaseOffset: number,
+): number {
+  const p = wrapPhase01(phase01);
+  const fA = Number.isFinite(freqA) ? freqA : 1;
+  const fB = Number.isFinite(freqB) ? freqB : 1;
+  const offset = Number.isFinite(phaseOffset) ? phaseOffset : 0;
+  const m = clamp01(mix);
+
+  if (m <= 0.0001) {
+    return -fA * Math.sin(TWO_PI * (p * fA));
+  }
+  return (
+    -(1 - m) * fA * Math.sin(TWO_PI * (p * fA)) -
+    m * fB * Math.sin(TWO_PI * (p * fB - offset))
+  );
 }
 
 /**

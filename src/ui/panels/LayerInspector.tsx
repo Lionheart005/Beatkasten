@@ -19,15 +19,12 @@ import type { CycleUnit } from '../../core/theory/cycles';
 import { CurveDrawCanvas } from '../components/CurveDrawCanvas';
 import { ModulationDrawer } from '../components/ModulationDrawer';
 import { SchemaControl } from '../components/SchemaControl';
-import { TimePreviewCanvas } from '../components/TimePreviewCanvas';
 import type { ActiveModTarget } from '../store/useStudioStore';
 
 interface LayerInspectorProps {
   layer: LayerConfig | undefined;
   allLayers: readonly LayerConfig[];
   curves: readonly DrawnCurveData[];
-  beatsPerBar: number;
-  currentLayerPhase: number;
   selectedCurveId: string;
   activeModTarget: ActiveModTarget | null;
   hoveredModSourceId: string | null;
@@ -115,97 +112,116 @@ const RHYTHM_PRESETS: ReadonlyArray<{
   },
 ];
 
+interface RhythmPresetValues {
+  warpAmount: number;
+  subdivisions: number;
+  phaseShift: number;
+  gravity: number;
+  resetCycles?: number;
+  freqA: number;
+  freqB: number;
+  interferenceMix: number;
+  phaseOffset: number;
+  threshold: number;
+}
+
+const RHYTHM_PRESET_VALUES: Record<RhythmPresetId, RhythmPresetValues> = {
+  'four-on-floor': {
+    warpAmount: 0,
+    subdivisions: 4,
+    phaseShift: 0,
+    gravity: 0,
+    resetCycles: 8,
+    freqA: 4,
+    freqB: 4,
+    interferenceMix: 0,
+    phaseOffset: 0,
+    threshold: 0,
+  },
+  'offbeat-pump': {
+    warpAmount: 0,
+    subdivisions: 4,
+    phaseShift: 0.5,
+    gravity: 0,
+    freqA: 4,
+    freqB: 4,
+    interferenceMix: 1,
+    phaseOffset: 0.5,
+    threshold: 0.15,
+  },
+  'triplet-gallop': {
+    warpAmount: 0.12,
+    subdivisions: 6,
+    phaseShift: 0,
+    gravity: 0.25,
+    freqA: 6,
+    freqB: 3,
+    interferenceMix: 0.35,
+    phaseOffset: 0,
+    threshold: 0.2,
+  },
+  'riddle-3-5': {
+    warpAmount: 0,
+    subdivisions: 5,
+    phaseShift: 0,
+    gravity: 0.2,
+    freqA: 5,
+    freqB: 3,
+    interferenceMix: 0.45,
+    phaseOffset: 0.125,
+    threshold: 0.25,
+  },
+};
+
 function applyRhythmPreset(
   ops: readonly OperatorConfig[],
   presetId: RhythmPresetId,
 ): OperatorConfig[] {
+  const preset = RHYTHM_PRESET_VALUES[presetId];
   return ops.map((op) => {
     if (op.moduleId === 'time-warp') {
       return {
         ...op,
         bypassed: false,
         params: {
-          warpAmount: presetId === 'triplet-gallop' ? 0.18 : 0,
+          warpAmount: preset.warpAmount,
         },
       };
     }
     if (op.moduleId === 'time-grid-gravity') {
-      if (presetId === 'four-on-floor') {
-        return {
-          ...op,
-          bypassed: false,
-          params: { subdivisions: 4, phaseShift: 0, gravity: 0.9 },
-        };
-      }
-      if (presetId === 'offbeat-pump') {
-        return {
-          ...op,
-          bypassed: false,
-          params: { subdivisions: 4, phaseShift: 0.5, gravity: 0.85 },
-        };
-      }
-      if (presetId === 'triplet-gallop') {
-        return {
-          ...op,
-          bypassed: false,
-          params: { subdivisions: 6, phaseShift: 0.15, gravity: 0.72 },
-        };
-      }
-      return {
-        ...op,
-        bypassed: false,
-        params: { subdivisions: 5, phaseShift: 0, gravity: 0.45 },
-      };
-    }
-    if (op.moduleId === 'time-pulse-interference') {
-      if (presetId === 'four-on-floor') {
-        return {
-          ...op,
-          bypassed: false,
-          params: {
-            freqA: 4,
-            freqB: 1,
-            interferenceMix: 0.2,
-            phaseOffset: 0,
-            threshold: 0.52,
-          },
-        };
-      }
-      if (presetId === 'offbeat-pump') {
-        return {
-          ...op,
-          bypassed: false,
-          params: {
-            freqA: 4,
-            freqB: 8,
-            interferenceMix: 0.38,
-            phaseOffset: 0.5,
-            threshold: 0.44,
-          },
-        };
-      }
-      if (presetId === 'triplet-gallop') {
-        return {
-          ...op,
-          bypassed: false,
-          params: {
-            freqA: 6,
-            freqB: 3,
-            interferenceMix: 0.52,
-            phaseOffset: 0.16,
-            threshold: 0.4,
-          },
-        };
-      }
       return {
         ...op,
         bypassed: false,
         params: {
-          freqA: 5,
-          freqB: 3,
-          interferenceMix: 0.6,
-          phaseOffset: 0.2,
-          threshold: 0.42,
+          subdivisions: preset.subdivisions,
+          phaseShift: preset.phaseShift,
+          gravity: preset.gravity,
+        },
+      };
+    }
+    if (op.moduleId === 'time-phase-drift') {
+      return {
+        ...op,
+        bypassed: false,
+        params: {
+          ...op.params,
+          driftSteps: 0,
+          ...(preset.resetCycles !== undefined
+            ? { resetCycles: preset.resetCycles }
+            : {}),
+        },
+      };
+    }
+    if (op.moduleId === 'time-pulse-interference') {
+      return {
+        ...op,
+        bypassed: false,
+        params: {
+          freqA: preset.freqA,
+          freqB: preset.freqB,
+          interferenceMix: preset.interferenceMix,
+          phaseOffset: preset.phaseOffset,
+          threshold: preset.threshold,
         },
       };
     }
@@ -217,8 +233,6 @@ export function LayerInspector({
   layer,
   allLayers,
   curves,
-  beatsPerBar,
-  currentLayerPhase,
   selectedCurveId,
   activeModTarget,
   hoveredModSourceId,
@@ -456,12 +470,6 @@ export function LayerInspector({
                 </button>
               ))}
             </div>
-
-            <TimePreviewCanvas
-              layer={layer}
-              beatsPerBar={beatsPerBar}
-              currentPhase={currentLayerPhase}
-            />
 
             {layer.timeOperators.map((op) => {
               const mod = defaultRegistry.getTimeOperator(op.moduleId);

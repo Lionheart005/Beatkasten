@@ -129,6 +129,7 @@ export class LayerEngine {
     triggerIntensity: 0,
     accent: 0,
     stepIndex: -1,
+    pulseSlope: 0,
   };
   private readonly frameB: MutableTimeFrame = {
     warpedPhase: 0,
@@ -136,6 +137,7 @@ export class LayerEngine {
     triggerIntensity: 0,
     accent: 0,
     stepIndex: -1,
+    pulseSlope: 0,
   };
   private prevFrame: MutableTimeFrame = this.frameA;
   private prevPulseTrigger = 0;
@@ -250,11 +252,13 @@ export class LayerEngine {
     this.frameA.triggerIntensity = 0;
     this.frameA.accent = 0;
     this.frameA.stepIndex = -1;
+    this.frameA.pulseSlope = 0;
     this.frameB.warpedPhase = 0;
     this.frameB.pulseEnergy = 0;
     this.frameB.triggerIntensity = 0;
     this.frameB.accent = 0;
     this.frameB.stepIndex = -1;
+    this.frameB.pulseSlope = 0;
     this.prevFrame = this.frameA;
     this.voiceWasModulated = false;
     this.prevPulseTrigger = 0;
@@ -607,6 +611,7 @@ export class LayerEngine {
     cur.triggerIntensity = 0;
     cur.accent = this.prevFrame.accent;
     cur.stepIndex = prevStepIndex;
+    cur.pulseSlope = this.prevFrame.pulseSlope ?? 0;
 
     let hasPulseGenerator = false;
 
@@ -652,6 +657,7 @@ export class LayerEngine {
         next.triggerIntensity = res.triggerIntensity;
         next.accent = res.accent;
         next.stepIndex = res.stepIndex;
+        next.pulseSlope = res.pulseSlope ?? 0;
       }
       const tmp = cur;
       cur = next;
@@ -667,6 +673,7 @@ export class LayerEngine {
       cur.triggerIntensity = stepped ? fallbackEnergy : 0;
       cur.accent = fallbackEnergy;
       cur.stepIndex = stepIndex;
+      cur.pulseSlope = -Math.sin(TWO_PI * cur.warpedPhase);
     }
 
     this.prevFrame = cur;

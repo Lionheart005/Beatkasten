@@ -38,8 +38,15 @@
     - `AudioWorklet` (`WorkletProcessor.ts`) startete per Play-Klick fehlerfrei (`Phasen-Radar` Takt/Beat, `Stereo-Oszilloskop`, Pegelanzeige und Live-Preset-Wechsel aktiv getestet).
     - Interaktive Flows geprüft: Modulations-Drawer `~`, Kurven-Zeichner (`Kurve 2` / `Freihand` / `Triolen-Welle`), Starter-Presets (`Triolen-Rätsel 5/4`, `Akkord → Offbeat Arp`, `Hypnotic A-Moll Club`) sowie `Von Takt 1 neu starten` / `Stop`.
     - Echter Browser-Export via Web Worker (`ExportWorker.ts` + `@breezystack/lamejs` für `MP3 192 kbps (Kompakt)`, 2 Takte Loop + 2 Takte Pre-Roll): abgeschlossen mit `Fertig gerendert (3.7 s Audio).` und direktem Download bei **0 Konsolen-/Worker-Fehlern**.
+- [x] **WP-10 (`gemini-4-hydrogen-high`)**: Mathematische Bereinigung der Zeit-/Interferenz-Trigger (`src/core/math/timeMath.ts`, `src/core/time/operators.ts`, `src/core/registry/types.ts`, `src/core/engine/LayerEngine.ts`, `src/core/state/presets.ts`, `tests/unit/theory-math.test.ts`):
+  - `interferenceEnergy` auf Cosinus-Ausrichtung (`Math.cos`) umgestellt (Welle-A-Gipfel exakt auf den Zählzeiten `k / freqA`, bei `Welle B Anteil <= 0.0001` komplette Abschaltung von Welle B) + analytische Steigung `interferenceSlope` (`pulseSlope` in `TimeFrame`).
+  - Intuitive `0`-Defaults (`Gravitation = 0`, `Welle B Anteil = 0`, `Versatz = 0`, `Auslöse-Schwelle = 0`, `min = 0`) sowie saubere Peak-/Step-Trigger-Logik ohne Flankendrift und ohne Doppeltrigger.
+  - Verifiziert per 2-Takt-On-Beat-Regressionstest in `theory-math.test.ts` (**24/24 Vitest-Tests** bestanden, 10s-48kHz-Render-Budget `925 ms`).
+- [x] **WP-11 (`gemini-4-hydrogen-high`)**: Obere `Wellenfunktion`-Anzeige & `Four-on-the-Floor`-Presets (`src/ui/components/TimePreviewCanvas.tsx`, `src/ui/App.tsx`, `src/ui/panels/LayerInspector.tsx`):
+  - `WaveformScopeCanvas` im oberen `visual-center` durch hochauflösendes (`256`-Sample + `ResizeObserver`) `TimePreviewCanvas` für den jeweils ausgewählten Layer ersetzt (`Wellenfunktion · <Layer>` bleibt beim Scrollen in Säule 1 stets sichtbar); doppelte kleine Vorschau aus Säule 1 entfernt und `applyRhythmPreset` für `Four-on-the-Floor` & Co. bereinigt.
 
 ## 4. Gefundene Fehler, Probleme & Wichtige Erkenntnisse
+- **Ursache für unregelmäßigen `Four-on-the-Floor` (gelöst in WP-10/WP-11)**: `interferenceEnergy` verwendete vorher `Math.sin` (startete auf der Zählzeit bei `0.5` unipolar statt auf dem Gipfel `1.0`), `time-pulse-interference` feuerte teils doppelt (`crossedThreshold` + `steppedInEnergy`) und `Four-on-the-Floor` mischte `freqB = 1` (`0.2`) + `threshold = 0.52` + `gravity = 0.9` ein. Durch Cosinus-Ausrichtung, analytische Wellenkamm-Erkennung (`pulseSlope`), `0`-Defaults und sauberes Preset läuft `Four-on-the-Floor` jetzt exakt auf Beat 1, 2, 3, 4.
 - **Umgebungs-Check (15.11.2026)**: `node` v26.9.0 & `npm` 12.2.0 installiert; `git` mit Initial-Commit (`048322d`) eingerichtet.
 - **MP3-Export**: `@breezystack/lamejs` (`^1.2.7`) installiert und im ESM-Context getestet (`Mp3Encoder` funktioniert sauber).
 - **Wichtige Typ- & Performance-Notizen**:

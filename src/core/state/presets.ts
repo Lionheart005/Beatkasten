@@ -72,7 +72,7 @@ function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
       params: {
         subdivisions: 4,
         phaseShift: 0,
-        gravity: 0.35,
+        gravity: 0,
       },
     },
     {
@@ -92,10 +92,10 @@ function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
       bypassed: false,
       params: {
         freqA: 4,
-        freqB: 3,
-        interferenceMix: 0.45,
-        phaseOffset: 0.125,
-        threshold: 0.42,
+        freqB: 4,
+        interferenceMix: 0,
+        phaseOffset: 0,
+        threshold: 0,
       },
     },
   ];
@@ -281,10 +281,10 @@ function createHypnoticSnapshot(): BeatSnapshot {
   const baseL1 = createDefaultLayer('L1 Kick & Sub-Puls', 'pulse-texture', 4, 'beats');
   const l1Ops = updateOperator(
     updateOperator(baseL1.timeOperators, 'time-pulse-interference', {
-      params: { freqA: 4, freqB: 1, interferenceMix: 0.2, phaseOffset: 0, threshold: 0.55 },
+      params: { freqA: 4, freqB: 4, interferenceMix: 0, phaseOffset: 0, threshold: 0 },
     }),
     'time-grid-gravity',
-    { params: { subdivisions: 4, phaseShift: 0, gravity: 0.9 } },
+    { params: { subdivisions: 4, phaseShift: 0, gravity: 0 } },
   );
   const l1Chain = updateCard(
     updateCard(
@@ -641,7 +641,7 @@ export function createTripletRiddlePreset(): BeatSnapshot {
     id: 'tr_kick',
     level: 0.88,
     timeOperators: updateOperator(l1Base.timeOperators, 'time-pulse-interference', {
-      params: { freqA: 4, freqB: 1, interferenceMix: 0.15, phaseOffset: 0, threshold: 0.55 },
+      params: { freqA: 4, freqB: 4, interferenceMix: 0, phaseOffset: 0, threshold: 0 },
     }),
     voice: {
       ...l1Base.voice,
@@ -751,7 +751,7 @@ export function createChordToOffbeatArpPreset(): BeatSnapshot {
     id: 'coa_kick',
     level: 0.86,
     timeOperators: updateOperator(kickBase.timeOperators, 'time-pulse-interference', {
-      params: { freqA: 4, freqB: 1, interferenceMix: 0.15, phaseOffset: 0, threshold: 0.55 },
+      params: { freqA: 4, freqB: 4, interferenceMix: 0, phaseOffset: 0, threshold: 0 },
     }),
     voice: {
       ...kickBase.voice,
