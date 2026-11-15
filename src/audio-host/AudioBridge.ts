@@ -83,7 +83,10 @@ export class AudioBridge {
       }
 
       if (!this.moduleLoaded) {
-        await this.ctx.audioWorklet.addModule(workletUrl);
+        const bustUrl = workletUrl.includes('?')
+          ? `${workletUrl}&v=${Date.now()}`
+          : `${workletUrl}?v=${Date.now()}`;
+        await this.ctx.audioWorklet.addModule(bustUrl);
         this.moduleLoaded = true;
       }
 

@@ -26,3 +26,15 @@ das ganze soll durchaus ein bisschen musiktheorie verständniss voraussetzten, a
 da ich selber klassicher musiker bin habe ich ahnung von musiktheorie, aber keine ahnung von sound system fachbegriffen und möchte das programm frustfrei bedienen können.
 
 natürlich brauch das auch eine projekt und ordnerstruktur.
+
+## Programm manuell starten (Windows)
+
+1. Ordner im Terminal / in PowerShell öffnen:
+   `cd "c:\Users\leona\OneDrive\Dokumente\Programmier Projekte\TechnoSoundGenerator"`
+2. Entwicklungsserver starten:
+   `npm run dev`
+3. Im Browser öffnen:
+   `http://localhost:5173/`
+4. Zum Beenden im Terminal:
+   `Strg + C`
+5. Optional: Tests ausführen (`npx vitest run`) oder Produktions-Build erstellen (`npm run build`).

@@ -52,6 +52,14 @@ export interface ModulationRouteConfig {
   readonly depth: number;
 }
 
+export interface SecondaryVoiceConfig {
+  readonly enabled: boolean;
+  readonly moduleId: string;
+  readonly version: number;
+  readonly mix: number;
+  readonly params: Record<string, number>;
+}
+
 export interface LayerConfig {
   readonly id: string;
   readonly name: string;
@@ -71,6 +79,7 @@ export interface LayerConfig {
     readonly version: number;
     readonly params: Record<string, number>;
   };
+  readonly secondaryVoice?: SecondaryVoiceConfig;
   readonly processorChain: readonly ProcessorCardConfig[];
   readonly modulations: readonly ModulationRouteConfig[];
 }

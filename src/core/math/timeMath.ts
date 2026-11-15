@@ -39,6 +39,7 @@ export function interferenceEnergy(
   mix: number,
   phaseOffset: number,
   threshold: number,
+  waveShape = 0,
 ): number {
   const p = wrapPhase01(phase01);
   const fA = Number.isFinite(freqA) ? freqA : 1;
@@ -56,7 +57,21 @@ export function interferenceEnergy(
         );
 
   if (thresh >= 0.9999) return 0;
-  return clamp01((unipolar - thresh) / (1 - thresh));
+  const gated = clamp01((unipolar - thresh) / (1 - thresh));
+
+  const shape = clampBipolar(waveShape);
+  if (Math.abs(shape) <= 1e-4) return gated;
+  if (shape < 0) {
+    const exp = Math.pow(12, -shape);
+    return gated <= 0 ? 0 : Math.pow(gated, exp);
+  }
+  if (shape >= 0.99) {
+    return gated >= 0.5 ? 1 : 0;
+  }
+  const k = 1 + (38 * shape * shape) / (1 - shape * 0.96);
+  const raw = Math.tanh(k * (gated - 0.5));
+  const norm = Math.tanh(k * 0.5);
+  return clamp01(0.5 + 0.5 * (raw / norm));
 }
 
 /**

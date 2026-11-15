@@ -81,7 +81,7 @@ const SUBDIVISIONS_PARAM: ParameterSchema = {
   description: 'Anzahl der rhythmischen Anziehungspunkte pro Zyklus.',
   domain: 'time',
   min: 1,
-  max: 12,
+  max: 64,
   step: 1,
   defaultValue: 4,
   curve: 'linear',
@@ -229,7 +229,7 @@ const FREQ_A_PARAM: ParameterSchema = {
   description: 'Grundpuls-Anzahl pro Zyklus für die erste rhythmische Welle.',
   domain: 'time',
   min: 1,
-  max: 16,
+  max: 64,
   step: 1,
   defaultValue: 4,
   curve: 'linear',
@@ -242,7 +242,7 @@ const FREQ_B_PARAM: ParameterSchema = {
   description: 'Gegenwelle für polymetrische Betonungen und lebendige Akzente.',
   domain: 'time',
   min: 1,
-  max: 16,
+  max: 64,
   step: 1,
   defaultValue: 4,
   curve: 'linear',
@@ -285,6 +285,19 @@ const THRESHOLD_PARAM: ParameterSchema = {
   modulatable: true,
 };
 
+const WAVE_SHAPE_PARAM: ParameterSchema = {
+  id: 'waveShape',
+  label: 'Wellen-Schärfe',
+  description:
+    '-1 = schmale steile Spitzen, 0 = weiche Kosinus-Welle, +1 = hart Ein/Aus (Rechteck-Gate) ohne Taktversatz.',
+  domain: 'time',
+  min: -1,
+  max: 1,
+  defaultValue: 0,
+  curve: 'bipolar',
+  modulatable: true,
+};
+
 export const timePulseInterferenceOperator: TimeOperatorModule = {
   id: 'time-pulse-interference',
   version: 1,
@@ -296,6 +309,7 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
     INTERFERENCE_MIX_PARAM,
     PHASE_OFFSET_PARAM,
     THRESHOLD_PARAM,
+    WAVE_SHAPE_PARAM,
   ],
   evaluateTimeInto(
     _ctx: TimeEvalContext,
@@ -308,6 +322,7 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
     const mix = readParam(INTERFERENCE_MIX_PARAM, params);
     const phaseOffset = readParam(PHASE_OFFSET_PARAM, params);
     const threshold = readParam(THRESHOLD_PARAM, params);
+    const waveShape = readParam(WAVE_SHAPE_PARAM, params);
 
     const p = wrapPhase01(prevFrame.warpedPhase);
     const pulseEnergy = interferenceEnergy(
@@ -317,6 +332,7 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
       mix,
       phaseOffset,
       threshold,
+      waveShape,
     );
     const stepIndex = Math.floor(p * freqA);
     const currSlope = interferenceSlope(p, freqA, freqB, mix, phaseOffset);
@@ -341,7 +357,7 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
               phaseOffset,
             )
           : (prevFrame.pulseSlope ?? 0);
-      if (prevSlope >= 0 && currSlope < 0 && pulseEnergy > 0.02) {
+      if (prevSlope > 1e-9 && currSlope <= 1e-9 && pulseEnergy > 0.02) {
         triggerIntensity = pulseEnergy;
       }
     }

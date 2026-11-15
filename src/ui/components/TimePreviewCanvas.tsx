@@ -143,7 +143,7 @@ export function TimePreviewCanvas({
     const bgCtx = bgCanvas.getContext('2d');
     if (!bgCtx) return;
 
-    const samples = 256;
+    const samples = 512;
     const energies = new Float32Array(samples);
     const triggers = new Float32Array(samples);
 
@@ -166,10 +166,14 @@ export function TimePreviewCanvas({
         stepIndex: prevFrame.stepIndex,
         pulseSlope: prevFrame.pulseSlope ?? 0,
       };
+      let hasPulseGenerator = false;
       for (const opCfg of layer.timeOperators) {
         if (opCfg.bypassed) continue;
         const mod = defaultRegistry.getTimeOperator(opCfg.moduleId);
         if (!mod) continue;
+        if (opCfg.moduleId === 'time-pulse-interference') {
+          hasPulseGenerator = true;
+        }
         frame = mod.evaluateTime(
           {
             beatPosition: p * cycleBeats,
@@ -184,6 +188,14 @@ export function TimePreviewCanvas({
           frame,
         );
       }
+      if (!hasPulseGenerator) {
+        frame = {
+          ...frame,
+          pulseEnergy: 1,
+          triggerIntensity: 0,
+          accent: 1,
+        };
+      }
       energies[i] = frame.pulseEnergy;
       triggers[i] = frame.triggerIntensity;
       prevFrame = frame;
@@ -195,7 +207,7 @@ export function TimePreviewCanvas({
     bgCtx.scale(dpr, dpr);
 
     // Beat grid lines
-    const gridCount = Math.max(1, Math.min(16, Math.round(cycleBeats)));
+    const gridCount = Math.max(1, Math.min(32, Math.round(cycleBeats)));
     bgCtx.strokeStyle = 'rgba(161, 174, 198, 0.14)';
     bgCtx.lineWidth = 1;
     for (let g = 1; g < gridCount; g++) {

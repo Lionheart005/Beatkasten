@@ -89,7 +89,7 @@ const SUSTAIN_HOLD_PARAM: ParameterSchema = {
   label: 'Halte-Energie',
   description: 'Bestimmt, wie lang und tragend der Bass zwischen den Pulsen stehen bleibt.',
   domain: 'timbre',
-  min: 0.05,
+  min: 0,
   max: 1,
   defaultValue: 0.6,
   curve: 'linear',
@@ -263,14 +263,11 @@ export class SubMotionVoice implements VoiceInstance {
     }
     const targetHz = this.cachedTargetHz;
 
-    const targetGate = clamp(
-      Math.max(
-        pulseEnergy,
-        sustainHold * (0.28 + 0.52 * pulseEnergy) + this.trigBoost,
-      ),
-      0,
-      1,
-    );
+    const shapedPulse = pulseEnergy * (0.35 + 0.65 * pulseEnergy);
+    const decayWeight = clamp(sustainHold * 2, 0, 1);
+    const droneFloor = clamp((sustainHold - 0.5) / 0.5, 0, 1);
+    const rhythmicGate = Math.max(shapedPulse, this.trigBoost * decayWeight * pulseEnergy);
+    const targetGate = clamp(rhythmicGate + droneFloor * (1 - rhythmicGate), 0, 1);
 
     const trigDecayCoeff = this.trigDecayCoeff;
 

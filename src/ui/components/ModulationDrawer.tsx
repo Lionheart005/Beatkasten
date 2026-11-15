@@ -72,7 +72,9 @@ export function ModulationDrawer({
           m.targetDomain === target.targetDomain &&
           m.targetParamId === target.targetParamId &&
           (m.targetCardId === target.targetCardId ||
-            (target.targetDomain === 'voice' && m.targetCardId === 'voice')),
+            (target.targetDomain === 'voice' &&
+              target.targetCardId !== 'secondary-voice' &&
+              m.targetCardId === 'voice')),
       )
     : [];
 
@@ -97,11 +99,15 @@ export function ModulationDrawer({
                   ...route.sourceConfig,
                   waveform: route.sourceConfig.waveform ?? 'sine',
                   cycleValue:
-                    route.sourceConfig.cycleValue ??
-                    (nextType === 'macro-arc' ? 8 : 4),
+                    nextType === 'drawn-curve'
+                      ? undefined
+                      : route.sourceConfig.cycleValue ??
+                        (nextType === 'macro-arc' ? 8 : 4),
                   cycleUnit:
-                    route.sourceConfig.cycleUnit ??
-                    (nextType === 'macro-arc' ? 'bars' : 'beats'),
+                    nextType === 'drawn-curve'
+                      ? undefined
+                      : route.sourceConfig.cycleUnit ??
+                        (nextType === 'macro-arc' ? 'bars' : 'beats'),
                   sourceLayerId:
                     route.sourceConfig.sourceLayerId ??
                     allLayers[0]?.id ??
@@ -266,6 +272,8 @@ export function ModulationDrawer({
                 sourceConfig: {
                   ...route.sourceConfig,
                   curveId: e.target.value,
+                  cycleValue: undefined,
+                  cycleUnit: undefined,
                 },
               })
             }
@@ -362,7 +370,8 @@ export function ModulationDrawer({
                       })
                     }
                   >
-                    → {route.targetParamId}
+                    → {route.targetCardId === 'secondary-voice' ? 'Stimme B: ' : ''}
+                    {route.targetParamId}
                   </button>
                   <span className="schema-value">
                     {SOURCE_LABELS[route.sourceType]} ({Math.round(route.depth * 100)}%)
@@ -381,6 +390,7 @@ export function ModulationDrawer({
       <div className="sub-card-head">
         <span className="sub-card-title">
           <Waves size={13} color={layer.color} />~ {target.label}
+          {target.targetCardId === 'secondary-voice' ? ' (Stimme B)' : ''}
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
@@ -388,7 +398,9 @@ export function ModulationDrawer({
             className="btn-primary btn-sm"
             onClick={() =>
               onAddRoute(layer.id, {
-                label: `${target.label} Bewegung`,
+                label: `${target.label}${
+                  target.targetCardId === 'secondary-voice' ? ' (Stimme B)' : ''
+                } Bewegung`,
                 enabled: true,
                 sourceType: 'wave-lfo',
                 sourceConfig: {

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
+  ChevronRight,
   GripVertical,
   Plus,
   Power,
@@ -9,11 +11,13 @@ import {
 } from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
 import type { DrawnCurveData } from '../../core/math/curves';
+import { buildDefaultParams } from '../../core/registry/types';
 import type {
   LayerConfig,
   ModulationRouteConfig,
   OperatorConfig,
   ProcessorCardConfig,
+  SecondaryVoiceConfig,
 } from '../../core/state/types';
 import type { CycleUnit } from '../../core/theory/cycles';
 import { CurveDrawCanvas } from '../components/CurveDrawCanvas';
@@ -123,6 +127,7 @@ interface RhythmPresetValues {
   interferenceMix: number;
   phaseOffset: number;
   threshold: number;
+  waveShape?: number;
 }
 
 const RHYTHM_PRESET_VALUES: Record<RhythmPresetId, RhythmPresetValues> = {
@@ -222,6 +227,7 @@ function applyRhythmPreset(
           interferenceMix: preset.interferenceMix,
           phaseOffset: preset.phaseOffset,
           threshold: preset.threshold,
+          waveShape: preset.waveShape ?? 0,
         },
       };
     }
@@ -261,6 +267,12 @@ export function LayerInspector({
   );
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const secEnabled = Boolean(layer?.secondaryVoice?.enabled);
+  const [secExpanded, setSecExpanded] = useState<boolean>(secEnabled);
+
+  useEffect(() => {
+    setSecExpanded(secEnabled);
+  }, [layer?.id, secEnabled]);
 
   if (!layer) {
     return (
@@ -271,6 +283,118 @@ export function LayerInspector({
   }
 
   const voiceModule = defaultRegistry.getVoice(layer.voice.moduleId);
+
+  const pickDefaultSecondaryVoiceId = (primaryVoiceId: string): string => {
+    const preferred = primaryVoiceId === 'modal-bell' ? 'pipe-organ' : 'modal-bell';
+    if (defaultRegistry.getVoice(preferred)) return preferred;
+    return (
+      voices.find((v) => v.id !== primaryVoiceId)?.id ??
+      voices[0]?.id ??
+      preferred
+    );
+  };
+
+  const createInitialSecondaryVoice = (
+    primaryVoiceId: string,
+    enabled: boolean,
+  ): SecondaryVoiceConfig => {
+    const moduleId = pickDefaultSecondaryVoiceId(primaryVoiceId);
+    const mod = defaultRegistry.getVoice(moduleId);
+    return {
+      enabled,
+      moduleId,
+      version: mod?.version ?? 1,
+      mix: 0.35,
+      params: mod ? buildDefaultParams(mod) : {},
+    };
+  };
+
+  const activeSecModuleId =
+    layer.secondaryVoice?.moduleId ??
+    pickDefaultSecondaryVoiceId(layer.voice.moduleId);
+  const secondaryVoiceMod = defaultRegistry.getVoice(activeSecModuleId);
+  const secondaryMix = layer.secondaryVoice?.mix ?? 0.35;
+  const secondaryParams = layer.secondaryVoice?.params ?? {};
+
+  const toggleSecondaryVoice = () => {
+    const nextEnabled = !secEnabled;
+    onCommitLayerImmediate(
+      layer.id,
+      (l) => {
+        const base =
+          l.secondaryVoice ??
+          createInitialSecondaryVoice(l.voice.moduleId, nextEnabled);
+        return {
+          ...l,
+          secondaryVoice: { ...base, enabled: nextEnabled },
+        };
+      },
+      nextEnabled ? 'Stimme B aktiviert' : 'Stimme B deaktiviert',
+    );
+    setSecExpanded(nextEnabled);
+  };
+
+  const switchSecondaryVoice = (nextModuleId: string) => {
+    const mod = defaultRegistry.getVoice(nextModuleId);
+    if (!mod) return;
+    onCommitLayerImmediate(
+      layer.id,
+      (l) => ({
+        ...l,
+        secondaryVoice: {
+          enabled: l.secondaryVoice?.enabled ?? true,
+          moduleId: mod.id,
+          version: mod.version,
+          mix: l.secondaryVoice?.mix ?? 0.35,
+          params: buildDefaultParams(mod),
+        },
+      }),
+      `Stimme B gewechselt: ${mod.displayName}`,
+    );
+    if (
+      activeModTarget &&
+      activeModTarget.layerId === layer.id &&
+      activeModTarget.targetCardId === 'secondary-voice' &&
+      !mod.parameters.some((p) => p.id === activeModTarget.targetParamId)
+    ) {
+      onSetActiveModTarget(null);
+    }
+  };
+
+  const updateSecondaryMix = (mix: number) => {
+    onUpdateLayerLive(
+      layer.id,
+      (l) => {
+        const base =
+          l.secondaryVoice ??
+          createInitialSecondaryVoice(l.voice.moduleId, false);
+        return {
+          ...l,
+          secondaryVoice: { ...base, mix },
+        };
+      },
+      'Anteil Stimme B',
+    );
+  };
+
+  const updateSecondaryVoiceParam = (paramId: string, val: number) => {
+    onUpdateLayerLive(
+      layer.id,
+      (l) => {
+        const base =
+          l.secondaryVoice ??
+          createInitialSecondaryVoice(l.voice.moduleId, false);
+        return {
+          ...l,
+          secondaryVoice: {
+            ...base,
+            params: { ...base.params, [paramId]: val },
+          },
+        };
+      },
+      `Stimme B Parameter: ${paramId}`,
+    );
+  };
 
   const updateTimeOpParam = (opId: string, paramId: string, val: number) => {
     onUpdateLayerLive(
@@ -556,6 +680,130 @@ export function LayerInspector({
                 ))}
               </div>
             )}
+
+            {/* Stimme B (Dual-Voice Kombination) */}
+            <div
+              className={`sub-card${!secEnabled && secExpanded ? ' is-bypassed' : ''}`}
+            >
+              <div className="sub-card-head">
+                <span
+                  className="sub-card-title"
+                  title="Optionale zweite Stimme mit der Haupt-Voice mischen"
+                >
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    style={{ padding: '2px 3px' }}
+                    onClick={() => setSecExpanded((prev) => !prev)}
+                    title={
+                      secExpanded ? 'Stimme B einklappen' : 'Stimme B aufklappen'
+                    }
+                    aria-expanded={secExpanded}
+                  >
+                    {secExpanded ? (
+                      <ChevronDown size={13} />
+                    ) : (
+                      <ChevronRight size={13} />
+                    )}
+                  </button>
+                  Stimme B (Kombination)
+                </span>
+                <button
+                  type="button"
+                  className={`btn-sm${secEnabled ? ' is-active' : ''}`}
+                  onClick={toggleSecondaryVoice}
+                  title={
+                    secEnabled
+                      ? 'Stimme B deaktivieren'
+                      : 'Stimme B aktivieren und einmischen'
+                  }
+                >
+                  <Power size={11} />
+                  {secEnabled ? 'An' : 'Aus'}
+                </button>
+              </div>
+
+              {!secExpanded && !secEnabled && (
+                <button
+                  type="button"
+                  className="btn-sm"
+                  onClick={toggleSecondaryVoice}
+                  title="Zweite Stimme aktivieren und mit der Haupt-Voice mischen"
+                >
+                  <Plus size={12} /> Zweite Stimme einmischen
+                </button>
+              )}
+
+              {secExpanded && (
+                <>
+                  <div
+                    className="field-chip"
+                    title="Zweite Klangerzeuger-Voice wählen"
+                  >
+                    <label>Voice B</label>
+                    <select
+                      value={activeSecModuleId}
+                      onChange={(e) => switchSecondaryVoice(e.target.value)}
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      {voices.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div
+                    className="schema-control"
+                    title="Mischanteil zwischen Haupt-Voice (0 %) und Stimme B (100 %)"
+                  >
+                    <div className="schema-control-row">
+                      <div className="schema-label-wrap">
+                        <span className="schema-label">Anteil Stimme B</span>
+                      </div>
+                      <span className="schema-value">
+                        {Math.round(secondaryMix * 100)} %
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={secondaryMix}
+                      style={{ '--slider-accent': layer.color } as CSSProperties}
+                      onChange={(e) =>
+                        updateSecondaryMix(Number(e.target.value))
+                      }
+                      onDoubleClick={() => updateSecondaryMix(0.35)}
+                      title="Anteil Stimme B (Doppelklick = 35 %)"
+                    />
+                  </div>
+
+                  {secondaryVoiceMod &&
+                    secondaryVoiceMod.parameters.map((schema) => (
+                      <SchemaControl
+                        key={schema.id}
+                        schema={schema}
+                        value={
+                          secondaryParams[schema.id] ?? schema.defaultValue
+                        }
+                        layer={layer}
+                        targetDomain="voice"
+                        targetCardId="secondary-voice"
+                        activeModTarget={activeModTarget}
+                        hoveredModSourceId={hoveredModSourceId}
+                        accentColor={layer.color}
+                        onChange={(val) =>
+                          updateSecondaryVoiceParam(schema.id, val)
+                        }
+                        onOpenModTarget={onSetActiveModTarget}
+                      />
+                    ))}
+                </>
+              )}
+            </div>
 
             <div className="muted-note" style={{ fontWeight: 600 }}>
               Klang- & Effekt-Kette (Ziehen oder Pfeile zum Umsortieren):

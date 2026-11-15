@@ -9,6 +9,7 @@ import {
 import { ModulationRouter } from '../../src/core/modulation/ModulationRouter';
 import { clampParam, type HarmonyFrame } from '../../src/core/registry/types';
 import {
+  createBellsAndOrganPreset,
   createChordToOffbeatArpPreset,
   createDefaultLayer,
   createHypnoticAMinorProject,
@@ -70,7 +71,7 @@ function mulberry32(seed: number): () => number {
 }
 
 describe('DSP Engine Sanity & Contracts', () => {
-  it('enforces zero NaN/Inf, headroom <= 0.96, and DC offset < 0.01 on all 3 starter presets', () => {
+  it('enforces zero NaN/Inf, headroom <= 0.96, and DC offset < 0.01 on all starter presets', () => {
     const hypnotic = createHypnoticAMinorProject();
     const snapshots: Array<{ name: string; snap: BeatSnapshot }> = [
       { name: 'hypnotic-main', snap: hypnotic.activeSnapshot },
@@ -78,6 +79,7 @@ describe('DSP Engine Sanity & Contracts', () => {
       { name: 'hypnotic-break', snap: hypnotic.sections[2]!.snapshot },
       { name: 'triplet-riddle', snap: createTripletRiddlePreset() },
       { name: 'chord-to-offbeat-arp', snap: createChordToOffbeatArpPreset() },
+      { name: 'bells-and-organ', snap: createBellsAndOrganPreset() },
     ];
 
     for (const { name, snap } of snapshots) {
@@ -591,4 +593,404 @@ describe('DSP Engine Sanity & Contracts', () => {
 
     expect(elapsedMs).toBeLessThan(1000);
   });
+
+  it('supports dual-voice secondaryVoice mix sweep (pipe-organ + modal-bell) with zero NaN/Inf and bounded headroom', () => {
+    const baseOrgan = createDefaultLayer('Dual Voice Test', 'pipe-organ', 4, 'beats');
+    const mixValues = [0, 0.25, 0.5, 0.75, 1.0];
+
+    for (const mix of mixValues) {
+      const layer: LayerConfig = {
+        ...baseOrgan,
+        id: `dual_mix_${mix}`,
+        level: 0.8,
+        secondaryVoice: {
+          enabled: true,
+          moduleId: 'modal-bell',
+          version: 1,
+          mix,
+          params: {
+            material: 0.85,
+            malletHardness: 0.6,
+            decay: 0.8,
+            shimmer: 0.4,
+            octaveShift: 1,
+            melodyPattern: 1,
+            melodyRange: 0.5,
+          },
+        },
+        modulations: [
+          {
+            id: 'mod_sec_shimmer',
+            enabled: true,
+            sourceType: 'wave-lfo',
+            sourceConfig: { waveform: 'sine', cycleValue: 2, cycleUnit: 'beats' },
+            targetDomain: 'voice',
+            targetCardId: 'secondary-voice',
+            targetParamId: 'shimmer',
+            combineMode: 'add',
+            depth: 0.25,
+          },
+        ],
+      };
+
+      const snap: BeatSnapshot = {
+        id: `snap_dual_${mix}`,
+        tempoBpm: 126,
+        timeSignature: { numerator: 4, denominator: 4 },
+        masterGain: 0.9,
+        masterGlue: 0.25,
+        harmony: {
+          rootNote: 9,
+          scaleId: 'dorian',
+          chordPreset: 'minor7',
+          progressionId: 'classic_i_VI_VII_i',
+        },
+        curves: [],
+        layers: [layer],
+      };
+
+      const rendered = renderOfflineLoop(snap, {
+        sampleRate: 48000,
+        bars: 2,
+        preRollBars: 0,
+      });
+      const stats = analyzeStereoBuffer(rendered.left, rendered.right);
+      expect(stats.hasNonFinite, `mix=${mix} produced NaN/Inf`).toBe(false);
+      expect(stats.peak, `mix=${mix} exceeded headroom`).toBeLessThanOrEqual(0.96);
+      expect(stats.rms, `mix=${mix} produced silent output`).toBeGreaterThan(0.005);
+      expect(Math.abs(stats.dcL), `mix=${mix} left DC too high`).toBeLessThan(0.01);
+      expect(Math.abs(stats.dcR), `mix=${mix} right DC too high`).toBeLessThan(0.01);
+    }
+
+    // Verify smooth live mix transition on LayerEngine without clicks or NaNs
+    const sampleRate = 48000;
+    const engine = new LayerEngine(sampleRate, 512);
+    const router = new ModulationRouter();
+    const pulses = new Map<string, number>();
+    const harmony = computeHarmonyFrame(9, 'dorian', 'minor7', 'static', 0);
+
+    const cfgStart: LayerConfig = {
+      ...baseOrgan,
+      secondaryVoice: {
+        enabled: true,
+        moduleId: 'modal-bell',
+        version: 1,
+        mix: 0.2,
+        params: defaultVoiceParamsForTest('modal-bell'),
+      },
+    };
+    const cfgMid: LayerConfig = {
+      ...cfgStart,
+      secondaryVoice: {
+        ...cfgStart.secondaryVoice!,
+        mix: 0.8,
+      },
+    };
+
+    engine.syncConfig(cfgStart, defaultRegistry);
+    engine.renderBlock(0, 512, 126, 4, harmony, router, pulses, true);
+    const block1Stats = analyzeStereoBuffer(
+      engine.bufL.subarray(0, 512),
+      engine.bufR.subarray(0, 512),
+    );
+    expect(block1Stats.hasNonFinite).toBe(false);
+
+    engine.syncConfig(cfgMid, defaultRegistry);
+    engine.renderBlock(
+      512 / ((60 / 126) * sampleRate),
+      512,
+      126,
+      4,
+      harmony,
+      router,
+      pulses,
+      true,
+    );
+    const block2Stats = analyzeStereoBuffer(
+      engine.bufL.subarray(0, 512),
+      engine.bufR.subarray(0, 512),
+    );
+    expect(block2Stats.hasNonFinite).toBe(false);
+    expect(block2Stats.peak).toBeLessThan(2.0);
+  });
+
+  it('PipeOrganVoice droneHold=1 holds continuous steady audio during pulse troughs and bypassing time-pulse-interference sustains across bars', () => {
+    const sampleRate = 48000;
+    const baseLayer = createDefaultLayer('Organ Drone', 'pipe-organ', 4, 'beats');
+
+    const droneLayer: LayerConfig = {
+      ...baseLayer,
+      level: 0.85,
+      timeOperators: baseLayer.timeOperators.map((op) =>
+        op.moduleId === 'time-pulse-interference'
+          ? {
+              ...op,
+              bypassed: false,
+              params: {
+                freqA: 2,
+                freqB: 2,
+                interferenceMix: 0,
+                phaseOffset: 0,
+                threshold: 0.75, // Deep zero-energy troughs between peaks
+                waveShape: 0,
+              },
+            }
+          : op,
+      ),
+      voice: {
+        ...baseLayer.voice,
+        params: {
+          ...baseLayer.voice.params,
+          register: 0.6,
+          chiff: 0.2,
+          tremolo: 0.0,
+          release: 0.08, // Short release so any trough dip would show up clearly without droneHold
+          droneHold: 1,
+          voiceMode: 2,
+          octaveShift: 0,
+          melodyPattern: 0,
+        },
+      },
+      processorChain: baseLayer.processorChain.map((c) => ({ ...c, bypassed: true })),
+    };
+
+    const makeSnap = (id: string, layer: LayerConfig): BeatSnapshot => ({
+      id,
+      tempoBpm: 120,
+      timeSignature: { numerator: 4, denominator: 4 },
+      masterGain: 0.9,
+      masterGlue: 0,
+      harmony: {
+        rootNote: 9,
+        scaleId: 'natural_minor',
+        chordPreset: 'minor',
+        progressionId: 'static',
+      },
+      curves: [],
+      layers: [layer],
+    });
+
+    // 1. droneHold=1 stays steady even during low/zero pulseEnergy troughs
+    const droneRendered = renderOfflineLoop(makeSnap('snap_organ_drone', droneLayer), {
+      sampleRate,
+      bars: 2,
+      preRollBars: 0,
+    });
+    const droneStats = analyzeStereoBuffer(droneRendered.left, droneRendered.right);
+    expect(droneStats.hasNonFinite).toBe(false);
+    expect(droneStats.rms).toBeGreaterThan(0.05);
+
+    // Sample 100 ms windows across bar 2 (including troughs at beat 1, 3)
+    const samplesPerBeat = Math.round((60 / 120) * sampleRate); // 24000
+    const windowLen = Math.round(0.1 * sampleRate);
+    const troughOffset = samplesPerBeat * 5 - Math.round(windowLen / 2);
+    const peakOffset = samplesPerBeat * 4 + Math.round(0.05 * sampleRate);
+    const troughStats = analyzeStereoBuffer(
+      droneRendered.left.subarray(troughOffset, troughOffset + windowLen),
+      droneRendered.right.subarray(troughOffset, troughOffset + windowLen),
+    );
+    const peakStats = analyzeStereoBuffer(
+      droneRendered.left.subarray(peakOffset, peakOffset + windowLen),
+      droneRendered.right.subarray(peakOffset, peakOffset + windowLen),
+    );
+    expect(troughStats.rms).toBeGreaterThan(0.05);
+    expect(troughStats.rms / peakStats.rms).toBeGreaterThan(0.8);
+
+    // 1b. droneHold=0 follows pulse troughs and drops significantly in valleys
+    const pulsedLayer: LayerConfig = {
+      ...droneLayer,
+      voice: {
+        ...droneLayer.voice,
+        params: {
+          ...droneLayer.voice.params,
+          release: 0.32,
+          droneHold: 0,
+        },
+      },
+    };
+    const pulsedRendered = renderOfflineLoop(makeSnap('snap_organ_pulsed', pulsedLayer), {
+      sampleRate,
+      bars: 2,
+      preRollBars: 0,
+    });
+    const pulsedTroughStats = analyzeStereoBuffer(
+      pulsedRendered.left.subarray(troughOffset, troughOffset + windowLen),
+      pulsedRendered.right.subarray(troughOffset, troughOffset + windowLen),
+    );
+    const pulsedPeakStats = analyzeStereoBuffer(
+      pulsedRendered.left.subarray(peakOffset, peakOffset + windowLen),
+      pulsedRendered.right.subarray(peakOffset, peakOffset + windowLen),
+    );
+    expect(pulsedTroughStats.hasNonFinite).toBe(false);
+    expect(pulsedPeakStats.rms).toBeGreaterThan(0.02);
+    expect(pulsedTroughStats.rms).toBeLessThan(pulsedPeakStats.rms * 0.35);
+
+    // 2. Bypassing time-pulse-interference produces steady non-zero continuous audio across bars (even at droneHold=0)
+    const bypassedLayer: LayerConfig = {
+      ...droneLayer,
+      timeOperators: droneLayer.timeOperators.map((op) =>
+        op.moduleId === 'time-pulse-interference' ? { ...op, bypassed: true } : op,
+      ),
+      voice: {
+        ...droneLayer.voice,
+        params: {
+          ...droneLayer.voice.params,
+          release: 0.7,
+          droneHold: 0,
+        },
+      },
+    };
+    const bypassedRendered = renderOfflineLoop(
+      makeSnap('snap_organ_bypassed', bypassedLayer),
+      {
+        sampleRate,
+        bars: 2,
+        preRollBars: 0,
+      },
+    );
+    const bypassedStats = analyzeStereoBuffer(
+      bypassedRendered.left,
+      bypassedRendered.right,
+    );
+    expect(bypassedStats.hasNonFinite).toBe(false);
+    expect(bypassedStats.rms).toBeGreaterThan(0.05);
+
+    const bar1Mid = samplesPerBeat * 2;
+    const bar2End = samplesPerBeat * 7;
+    const bar1Stats = analyzeStereoBuffer(
+      bypassedRendered.left.subarray(bar1Mid, bar1Mid + windowLen),
+      bypassedRendered.right.subarray(bar1Mid, bar1Mid + windowLen),
+    );
+    const bar2Stats = analyzeStereoBuffer(
+      bypassedRendered.left.subarray(bar2End, bar2End + windowLen),
+      bypassedRendered.right.subarray(bar2End, bar2End + windowLen),
+    );
+    expect(bar1Stats.rms).toBeGreaterThan(0.05);
+    expect(bar2Stats.rms).toBeGreaterThan(0.05);
+    expect(Math.min(bar1Stats.rms, bar2Stats.rms) / Math.max(bar1Stats.rms, bar2Stats.rms)).toBeGreaterThan(0.9);
+  });
+
+  it('ChordArpVoice droneHold=1 holds continuous steady audio across peak and trough halves of time-pulse-interference', () => {
+    const sampleRate = 48000;
+    const baseLayer = createDefaultLayer('Chord Drone', 'chord-arp', 4, 'beats');
+
+    const droneLayer: LayerConfig = {
+      ...baseLayer,
+      level: 0.85,
+      timeOperators: baseLayer.timeOperators.map((op) =>
+        op.moduleId === 'time-pulse-interference'
+          ? {
+              ...op,
+              bypassed: false,
+              params: {
+                freqA: 2,
+                freqB: 2,
+                interferenceMix: 0,
+                phaseOffset: 0,
+                threshold: 0.75, // Deep zero-energy troughs between peaks
+                waveShape: 0,
+              },
+            }
+          : op,
+      ),
+      voice: {
+        ...baseLayer.voice,
+        params: {
+          ...baseLayer.voice.params,
+          chordArpMorph: 0,
+          droneHold: 1,
+          softness: 0.05,
+        },
+      },
+      processorChain: baseLayer.processorChain.map((c) => ({ ...c, bypassed: true })),
+    };
+
+    const snap: BeatSnapshot = {
+      id: 'snap_chord_drone',
+      tempoBpm: 120,
+      timeSignature: { numerator: 4, denominator: 4 },
+      masterGain: 0.9,
+      masterGlue: 0,
+      harmony: {
+        rootNote: 9,
+        scaleId: 'natural_minor',
+        chordPreset: 'minor',
+        progressionId: 'static',
+      },
+      curves: [],
+      layers: [droneLayer],
+    };
+
+    const rendered = renderOfflineLoop(snap, {
+      sampleRate,
+      bars: 2,
+      preRollBars: 0,
+    });
+    const fullStats = analyzeStereoBuffer(rendered.left, rendered.right);
+    expect(fullStats.hasNonFinite).toBe(false);
+    expect(fullStats.rms).toBeGreaterThan(0.05);
+
+    // Sample 100 ms windows in peak and trough halves of bar 2
+    const samplesPerBeat = Math.round((60 / 120) * sampleRate); // 24000
+    const windowLen = Math.round(0.1 * sampleRate);
+    const troughOffset = samplesPerBeat * 5 - Math.round(windowLen / 2);
+    const peakOffset = samplesPerBeat * 4 + Math.round(0.05 * sampleRate);
+
+    const troughStats = analyzeStereoBuffer(
+      rendered.left.subarray(troughOffset, troughOffset + windowLen),
+      rendered.right.subarray(troughOffset, troughOffset + windowLen),
+    );
+    const peakStats = analyzeStereoBuffer(
+      rendered.left.subarray(peakOffset, peakOffset + windowLen),
+      rendered.right.subarray(peakOffset, peakOffset + windowLen),
+    );
+
+    expect(troughStats.hasNonFinite).toBe(false);
+    expect(troughStats.rms).toBeGreaterThan(0.05);
+    expect(troughStats.rms / peakStats.rms).toBeGreaterThan(0.8);
+
+    // Also verify droneHold=0 drops cleanly in the pulse trough
+    const pulsedChordSnap: BeatSnapshot = {
+      ...snap,
+      id: 'snap_chord_pulsed',
+      layers: [
+        {
+          ...droneLayer,
+          voice: {
+            ...droneLayer.voice,
+            params: {
+              ...droneLayer.voice.params,
+              droneHold: 0,
+            },
+          },
+        },
+      ],
+    };
+    const pulsedRendered = renderOfflineLoop(pulsedChordSnap, {
+      sampleRate,
+      bars: 2,
+      preRollBars: 0,
+    });
+    const pulsedTroughStats = analyzeStereoBuffer(
+      pulsedRendered.left.subarray(troughOffset, troughOffset + windowLen),
+      pulsedRendered.right.subarray(troughOffset, troughOffset + windowLen),
+    );
+    const pulsedPeakStats = analyzeStereoBuffer(
+      pulsedRendered.left.subarray(peakOffset, peakOffset + windowLen),
+      pulsedRendered.right.subarray(peakOffset, peakOffset + windowLen),
+    );
+    expect(pulsedTroughStats.hasNonFinite).toBe(false);
+    expect(pulsedPeakStats.rms).toBeGreaterThan(0.02);
+    expect(pulsedTroughStats.rms).toBeLessThan(pulsedPeakStats.rms * 0.35);
+  });
 });
+
+function defaultVoiceParamsForTest(moduleId: string): Record<string, number> {
+  const mod = defaultRegistry.getVoice(moduleId);
+  if (!mod) return {};
+  const out: Record<string, number> = {};
+  for (const p of mod.parameters) {
+    out[p.id] = p.defaultValue;
+  }
+  return out;
+}

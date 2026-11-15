@@ -384,8 +384,6 @@ export function CurveDrawCanvas({
       sourceType: 'drawn-curve',
       sourceConfig: {
         curveId: curveIdToUse,
-        cycleValue: activeCurve.cycleValue,
-        cycleUnit: activeCurve.cycleUnit,
       },
       targetDomain: target.domain,
       targetCardId: target.cardId,

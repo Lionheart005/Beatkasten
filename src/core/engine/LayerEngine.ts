@@ -21,7 +21,7 @@ import { type LayerConfig } from '../state/types';
 import { cycleToBeats } from '../theory/cycles';
 
 export const CONTROL_SUBBLOCK_SIZE = 32;
-const TWO_PI = Math.PI * 2;
+const HALF_PI = Math.PI * 0.5;
 const DEFAULT_MAX_BLOCK_SIZE = 4096;
 
 function syncStaticParams(
@@ -108,12 +108,20 @@ export class LayerEngine {
   // Pre-allocated sub-block buffers for sizes 1..CONTROL_SUBBLOCK_SIZE (zero allocation).
   private readonly subBufsL: readonly Float32Array[];
   private readonly subBufsR: readonly Float32Array[];
+  private readonly secSubBufsL: readonly Float32Array[];
+  private readonly secSubBufsR: readonly Float32Array[];
 
   private config: LayerConfig | null = null;
   private voiceModule: VoiceModule | null = null;
   private voiceInstance: VoiceInstance | null = null;
   private voiceEffectiveParams: Record<string, number> = {};
   private voiceWasModulated = false;
+
+  private secondaryVoiceModule: VoiceModule | null = null;
+  private secondaryVoiceInstance: VoiceInstance | null = null;
+  private secondaryVoiceEffectiveParams: Record<string, number> = {};
+  private secondaryVoiceWasModulated = false;
+  private readonly secondaryMixSmoother: OnePoleSmoother;
 
   private readonly timeOpSlots: TimeOpSlot[] = [];
   private readonly timeOpCache = new Map<string, TimeOpSlot>();
@@ -158,15 +166,22 @@ export class LayerEngine {
 
     const sL: Float32Array[] = [new Float32Array(0)];
     const sR: Float32Array[] = [new Float32Array(0)];
+    const secL: Float32Array[] = [new Float32Array(0)];
+    const secR: Float32Array[] = [new Float32Array(0)];
     for (let k = 1; k <= CONTROL_SUBBLOCK_SIZE; k++) {
       sL.push(new Float32Array(k));
       sR.push(new Float32Array(k));
+      secL.push(new Float32Array(k));
+      secR.push(new Float32Array(k));
     }
     this.subBufsL = sL;
     this.subBufsR = sR;
+    this.secSubBufsL = secL;
+    this.secSubBufsR = secR;
 
     this.gainLSmoother = new OnePoleSmoother(this.sampleRate, 12, 0);
     this.gainRSmoother = new OnePoleSmoother(this.sampleRate, 12, 0);
+    this.secondaryMixSmoother = new OnePoleSmoother(this.sampleRate, 12, 0);
 
     const dummyHarmony: HarmonyFrame = {
       rootNote: 9,
@@ -213,9 +228,13 @@ export class LayerEngine {
     this.sampleRate = nextSr;
     this.gainLSmoother.setSampleRate(this.sampleRate);
     this.gainRSmoother.setSampleRate(this.sampleRate);
+    this.secondaryMixSmoother.setSampleRate(this.sampleRate);
 
     if (this.voiceModule) {
       this.voiceInstance = this.voiceModule.createInstance(this.sampleRate);
+    }
+    if (this.secondaryVoiceModule) {
+      this.secondaryVoiceInstance = this.secondaryVoiceModule.createInstance(this.sampleRate);
     }
     for (const [cardId, slot] of this.processorCache.entries()) {
       const rebuilt: ProcessorSlot = {
@@ -242,11 +261,13 @@ export class LayerEngine {
     this.bufL.fill(0);
     this.bufR.fill(0);
     this.voiceInstance?.reset();
+    this.secondaryVoiceInstance?.reset();
     for (const slot of this.processorCache.values()) {
       slot.instance.reset();
     }
     this.gainLSmoother.reset(0);
     this.gainRSmoother.reset(0);
+    this.secondaryMixSmoother.reset(0);
     this.frameA.warpedPhase = 0;
     this.frameA.pulseEnergy = 0;
     this.frameA.triggerIntensity = 0;
@@ -261,6 +282,7 @@ export class LayerEngine {
     this.frameB.pulseSlope = 0;
     this.prevFrame = this.frameA;
     this.voiceWasModulated = false;
+    this.secondaryVoiceWasModulated = false;
     this.prevPulseTrigger = 0;
     this.lastPhase = 0;
     this.lastPulseEnergy = 0;
@@ -291,6 +313,38 @@ export class LayerEngine {
     } else {
       syncStaticParams(nextVoiceMod.parameters, config.voice.params, this.voiceEffectiveParams);
       this.voiceWasModulated = false;
+    }
+
+    // 1b. Secondary voice instance (reuse if enabled and moduleId matches)
+    const secCfg = config.secondaryVoice;
+    const nextSecMod =
+      secCfg && secCfg.enabled ? registry.getVoice(secCfg.moduleId) : undefined;
+    if (!secCfg || !secCfg.enabled || !nextSecMod) {
+      this.secondaryVoiceModule = null;
+      this.secondaryVoiceInstance = null;
+      this.secondaryVoiceEffectiveParams = {};
+      this.secondaryVoiceWasModulated = false;
+      this.secondaryMixSmoother.reset(0);
+    } else if (
+      this.secondaryVoiceModule?.id !== nextSecMod.id ||
+      !this.secondaryVoiceInstance
+    ) {
+      this.secondaryVoiceModule = nextSecMod;
+      this.secondaryVoiceInstance = nextSecMod.createInstance(this.sampleRate);
+      this.secondaryVoiceEffectiveParams = buildDefaultParams(nextSecMod);
+      syncStaticParams(
+        nextSecMod.parameters,
+        secCfg.params,
+        this.secondaryVoiceEffectiveParams,
+      );
+      this.secondaryVoiceWasModulated = false;
+    } else {
+      syncStaticParams(
+        nextSecMod.parameters,
+        secCfg.params,
+        this.secondaryVoiceEffectiveParams,
+      );
+      this.secondaryVoiceWasModulated = false;
     }
 
     // 2. Time operators
@@ -429,6 +483,7 @@ export class LayerEngine {
     if (!cfg.enabled) {
       this.gainLSmoother.reset(0);
       this.gainRSmoother.reset(0);
+      this.secondaryMixSmoother.reset(0);
       for (let i = 0; i < count; i++) {
         this.bufL[i] = 0;
         this.bufR[i] = 0;
@@ -444,6 +499,7 @@ export class LayerEngine {
     if (!shouldRenderDsp) {
       this.gainLSmoother.reset(0);
       this.gainRSmoother.reset(0);
+      this.secondaryMixSmoother.reset(0);
       for (let i = 0; i < count; i++) {
         this.bufL[i] = 0;
         this.bufR[i] = 0;
@@ -515,6 +571,65 @@ export class LayerEngine {
         this.voiceEffectiveParams,
         this.voiceCtx as VoiceRenderContext,
       );
+
+      // 3b. Render optional secondary voice and equal-power blend before updating prevPulseTrigger
+      const secCfg = cfg.secondaryVoice;
+      const secInst = this.secondaryVoiceInstance;
+      const secMod = this.secondaryVoiceModule;
+      if (
+        secCfg?.enabled &&
+        secInst !== null &&
+        secMod !== null &&
+        (secCfg.mix > 0.001 || Math.abs(this.secondaryMixSmoother.current) > 0.001)
+      ) {
+        if (router.hasTargetRoutes(cfg, 'voice', 'secondary-voice')) {
+          router.applyTargetModulation(
+            cfg,
+            'voice',
+            'secondary-voice',
+            undefined,
+            secMod.parameters,
+            secCfg.params,
+            this.secondaryVoiceEffectiveParams,
+          );
+          this.secondaryVoiceWasModulated = true;
+        } else if (this.secondaryVoiceWasModulated) {
+          syncStaticParams(
+            secMod.parameters,
+            secCfg.params,
+            this.secondaryVoiceEffectiveParams,
+          );
+          this.secondaryVoiceWasModulated = false;
+        }
+
+        const secSubL = this.secSubBufsL[subLen]!;
+        const secSubR = this.secSubBufsR[subLen]!;
+        secSubL.fill(0);
+        secSubR.fill(0);
+
+        secInst.process(
+          secSubL,
+          secSubR,
+          this.secondaryVoiceEffectiveParams,
+          this.voiceCtx as VoiceRenderContext,
+        );
+
+        const targetMix = clamp(secCfg.mix, 0, 1);
+        for (let i = 0; i < subLen; i++) {
+          const m = this.secondaryMixSmoother.process(targetMix);
+          const angle = m * HALF_PI;
+          const gPrimary = Math.cos(angle);
+          const gSecondary = Math.sin(angle);
+          subL[i] = subL[i]! * gPrimary + secSubL[i]! * gSecondary;
+          subR[i] = subR[i]! * gPrimary + secSubR[i]! * gSecondary;
+        }
+        if (Math.abs(this.secondaryMixSmoother.current - targetMix) < 1e-6) {
+          this.secondaryMixSmoother.reset(targetMix);
+        }
+      } else {
+        this.secondaryMixSmoother.reset(0);
+      }
+
       this.prevPulseTrigger = timeFrame.triggerIntensity;
 
       // 4. Process dynamically ordered ProcessorChain (with modulated processor parameters)
@@ -665,15 +780,11 @@ export class LayerEngine {
     }
 
     if (!hasPulseGenerator) {
-      // Smooth default pulse wave when no pulse-interference operator is active.
-      const fallbackEnergy = 0.5 + 0.5 * Math.cos(TWO_PI * cur.warpedPhase);
-      const stepIndex = Math.floor(cur.warpedPhase * 4);
-      const stepped = stepIndex !== prevStepIndex;
-      cur.pulseEnergy = fallbackEnergy;
-      cur.triggerIntensity = stepped ? fallbackEnergy : 0;
-      cur.accent = fallbackEnergy;
-      cur.stepIndex = stepIndex;
-      cur.pulseSlope = -Math.sin(TWO_PI * cur.warpedPhase);
+      cur.pulseEnergy = 1;
+      cur.triggerIntensity = 0;
+      cur.accent = 1;
+      cur.stepIndex = 0;
+      cur.pulseSlope = 0;
     }
 
     this.prevFrame = cur;

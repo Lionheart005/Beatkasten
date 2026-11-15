@@ -8,7 +8,13 @@ import {
   warpPhase,
   wrapPhase01,
 } from '../../src/core/math';
-import type { MutableTimeFrame, TimeEvalContext } from '../../src/core/registry/types';
+import type {
+  MutableTimeFrame,
+  ParameterSchema,
+  TimeEvalContext,
+} from '../../src/core/registry/types';
+import { ModulationRouter } from '../../src/core/modulation/ModulationRouter';
+import type { BeatSnapshot, LayerConfig } from '../../src/core/state/types';
 import { timePulseInterferenceOperator } from '../../src/core/time/operators';
 import {
   computeCombinedCycleBeats,
@@ -245,6 +251,96 @@ describe('Phase & Time Math', () => {
       expect(trig.intensity).toBeLessThanOrEqual(1);
     }
   });
+
+  it('interferenceEnergy shapes waves cleanly for waveShape = -1 (needle) and +1 (rectangular gate) without peak displacement', () => {
+    // Needle peaks (waveShape = -1): peak at p = 0 stays 1, mid-slope drops much sharper than waveShape = 0
+    expect(interferenceEnergy(0, 4, 4, 0, 0, 0, -1)).toBeCloseTo(1, 6);
+    const softMid = interferenceEnergy(0.0625, 4, 4, 0, 0, 0, 0);
+    const needleMid = interferenceEnergy(0.0625, 4, 4, 0, 0, 0, -1);
+    expect(softMid).toBeCloseTo(0.5, 6);
+    expect(needleMid).toBeLessThan(0.01);
+    expect(needleMid).toBeLessThan(softMid * 0.05);
+
+    // Rectangular gate (waveShape = +1): outputs strictly 0 or 1, 1 at p = 0, 0 at p = 0.125 for freqA = 4
+    expect(interferenceEnergy(0, 4, 4, 0, 0, 0, 1)).toBe(1);
+    expect(interferenceEnergy(0.125, 4, 4, 0, 0, 0, 1)).toBe(0);
+    for (let i = 0; i < 200; i += 1) {
+      const p = i / 200;
+      const val = interferenceEnergy(p, 4, 4, 0, 0, 0, 1);
+      expect(val === 0 || val === 1).toBe(true);
+    }
+    // Symmetric around p = 0 (zero peak displacement)
+    expect(interferenceEnergy(0.05, 4, 4, 0, 0, 0, 1)).toBe(1);
+    expect(interferenceEnergy(0.95, 4, 4, 0, 0, 0, 1)).toBe(1);
+  });
+
+  it('timePulseInterferenceOperator triggers cleanly 32 times across [0, 1) when freqA = 32', () => {
+    const sampleRate = 48000;
+    const bpm = 130;
+    const beatsPerBar = 4;
+    const cycleBeats = 4;
+    const subblockSize = 32;
+    const samplesPerBeat = (60 / bpm) * sampleRate;
+    const cycleSamples = Math.floor(cycleBeats * samplesPerBeat);
+
+    let prevFrame: MutableTimeFrame = {
+      warpedPhase: 0,
+      pulseEnergy: 0,
+      triggerIntensity: 0,
+      accent: 0,
+      stepIndex: -1,
+      pulseSlope: 0,
+    };
+    const triggers: number[] = [];
+    const params = {
+      freqA: 32,
+      freqB: 4,
+      interferenceMix: 0,
+      phaseOffset: 0,
+      threshold: 0,
+      waveShape: 0,
+    };
+
+    for (let sample = 0; sample < cycleSamples; sample += subblockSize) {
+      const beatPosition = sample / samplesPerBeat;
+      const layerPhase = wrapPhase01(beatPosition / cycleBeats);
+      const ctx: TimeEvalContext = {
+        beatPosition,
+        barPosition: beatPosition / beatsPerBar,
+        layerPhase,
+        cycleIndex: 0,
+        cycleBeats,
+        beatsPerBar,
+        sampleRate,
+      };
+      const inFrame: MutableTimeFrame = {
+        warpedPhase: layerPhase,
+        pulseEnergy: prevFrame.pulseEnergy,
+        triggerIntensity: 0,
+        accent: prevFrame.accent,
+        stepIndex: prevFrame.stepIndex,
+        pulseSlope: prevFrame.pulseSlope,
+      };
+      const outFrame: MutableTimeFrame = {
+        warpedPhase: 0,
+        pulseEnergy: 0,
+        triggerIntensity: 0,
+        accent: 0,
+        stepIndex: 0,
+        pulseSlope: 0,
+      };
+      timePulseInterferenceOperator.evaluateTimeInto!(ctx, params, inFrame, outFrame);
+      if (outFrame.triggerIntensity > 0) {
+        triggers.push(layerPhase);
+      }
+      prevFrame = outFrame;
+    }
+
+    expect(triggers).toHaveLength(32);
+    for (let i = 0; i < 32; i += 1) {
+      expect(Math.abs(triggers[i]! - i / 32)).toBeLessThan(0.002);
+    }
+  });
 });
 
 describe('Drawn Curves', () => {
@@ -282,5 +378,121 @@ describe('Drawn Curves', () => {
 
     expect(evaluateDrawnCurve([], 0.5)).toBe(0.5);
     expect(evaluateDrawnCurve([{ x: 0.5, y: 0.8 }], 0.2)).toBe(0.8);
+  });
+
+  it('ModulationRouter uses curve.cycleValue as primary truth over stale route.sourceConfig.cycleValue', () => {
+    const router = new ModulationRouter();
+    const curveId = 'curve-10-beats';
+    const layerId = 'layer-1';
+    const targetCardId = 'voice-1';
+    const targetParamId = 'cutoff';
+
+    const layer: LayerConfig = {
+      id: layerId,
+      name: 'Synth',
+      color: '#38bdf8',
+      enabled: true,
+      muted: false,
+      solo: false,
+      level: 0.8,
+      pan: 0,
+      cycleLength: { value: 4, unit: 'beats' },
+      timeOperators: [],
+      voice: {
+        moduleId: targetCardId,
+        version: 1,
+        params: { [targetParamId]: 1 },
+      },
+      processorChain: [],
+      modulations: [
+        {
+          id: 'mod-1',
+          enabled: true,
+          sourceType: 'drawn-curve',
+          sourceConfig: {
+            curveId,
+            cycleValue: 4, // stale LFO cycle value
+            cycleUnit: 'beats',
+          },
+          targetDomain: 'voice',
+          targetCardId,
+          targetParamId,
+          combineMode: 'multiply',
+          depth: 1,
+        },
+      ],
+    };
+
+    const snapshot: BeatSnapshot = {
+      id: 'snap-1',
+      tempoBpm: 130,
+      timeSignature: { numerator: 4, denominator: 4 },
+      masterGain: 0.8,
+      masterGlue: 0,
+      harmony: {
+        rootNote: 9,
+        scaleId: 'natural_minor',
+        chordPreset: 'minor7',
+        progressionId: 'dark_minimal',
+      },
+      curves: [
+        {
+          id: curveId,
+          name: 'Ten Beat Ramp',
+          cycleValue: 10,
+          cycleUnit: 'beats',
+          snapDivision: 0,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.25, y: 0.5 },
+            { x: 0.5, y: 1 },
+            { x: 0.75, y: 0.5 },
+          ],
+        },
+      ],
+      layers: [layer],
+    };
+
+    router.prepareSnapshot(snapshot);
+
+    const schemas: ParameterSchema[] = [
+      {
+        id: targetParamId,
+        label: 'Cutoff',
+        description: 'Filter cutoff',
+        domain: 'timbre',
+        min: 0,
+        max: 1,
+        defaultValue: 1,
+        modulatable: true,
+      },
+    ];
+    const baseParams: Record<string, number> = { [targetParamId]: 1 };
+    const outParams: Record<string, number> = {};
+    const layerPulses = new Map<string, number>();
+
+    const evalAtBeat = (beatPosition: number): number => {
+      router.beginLayerSubBlock(layer, beatPosition, 4, layerPulses);
+      router.applyTargetModulation(
+        layer,
+        'voice',
+        targetCardId,
+        undefined,
+        schemas,
+        baseParams,
+        outParams,
+      );
+      return outParams[targetParamId]!;
+    };
+
+    const at0 = evalAtBeat(0);
+    const at2_5 = evalAtBeat(2.5);
+    const at5 = evalAtBeat(5);
+    const at10 = evalAtBeat(10);
+
+    expect(at0).toBeLessThan(0.05);
+    expect(at2_5).toBeCloseTo(0.5, 1);
+    expect(at5).toBeGreaterThan(0.95);
+    expect(at10).toBeCloseTo(at0, 5);
   });
 });

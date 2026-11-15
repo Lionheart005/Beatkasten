@@ -434,18 +434,18 @@ export class TechnoEngine {
           );
           combined = computeCombinedCycleBeats(combined, modBeats);
         } else if (mod.sourceType === 'drawn-curve') {
-          let cv = mod.sourceConfig.cycleValue;
-          let cu = mod.sourceConfig.cycleUnit;
-          if (cv === undefined || cu === undefined) {
-            for (let c = 0; c < snapshot.curves.length; c++) {
-              const curve = snapshot.curves[c]!;
-              if (curve.id === mod.sourceConfig.curveId) {
-                cv = cv ?? curve.cycleValue;
-                cu = cu ?? curve.cycleUnit;
-                break;
-              }
+          let cv: number | undefined;
+          let cu: typeof mod.sourceConfig.cycleUnit;
+          for (let c = 0; c < snapshot.curves.length; c++) {
+            const curve = snapshot.curves[c]!;
+            if (curve.id === mod.sourceConfig.curveId) {
+              cv = curve.cycleValue;
+              cu = curve.cycleUnit;
+              break;
             }
           }
+          cv = cv ?? mod.sourceConfig.cycleValue;
+          cu = cu ?? mod.sourceConfig.cycleUnit;
           if (cv !== undefined && cu !== undefined) {
             combined = computeCombinedCycleBeats(
               combined,

@@ -32,7 +32,11 @@ interface TransportBarProps {
     label: string,
   ) => void;
   onApplyPreset: (
-    key: 'hypnotic-aminor' | 'triplet-riddle' | 'chord-offbeat-arp',
+    key:
+      | 'hypnotic-aminor'
+      | 'triplet-riddle'
+      | 'chord-offbeat-arp'
+      | 'bells-organ',
   ) => void;
   onConnectFolder: () => void;
   onOpenProjectModal: () => void;
@@ -327,6 +331,14 @@ export function TransportBar({
             title="Stehender Akkord verwandelt sich in Offbeat-Arpeggio"
           >
             Akkord → Offbeat Arp
+          </button>
+          <button
+            type="button"
+            className="preset-chip"
+            onClick={() => onApplyPreset('bells-organ')}
+            title="4/4 Kick, Offbeat-Glockenspiel & kombinierte Orgelpipes"
+          >
+            Glocken & Orgel
           </button>
         </div>
 

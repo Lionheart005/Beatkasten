@@ -119,6 +119,19 @@ const SOFTNESS_PARAM: ParameterSchema = {
   unitLabel: 's',
 };
 
+const DRONE_HOLD_PARAM: ParameterSchema = {
+  id: 'droneHold',
+  label: 'Dauerton (Durchgehend)',
+  description:
+    '0 = folgt der Puls-Welle dynamisch, 1 = hält den Akkord/Pegel durchgehend ohne Wellen-Auf-und-Ab.',
+  domain: 'timbre',
+  min: 0,
+  max: 1,
+  defaultValue: 0,
+  curve: 'linear',
+  modulatable: true,
+};
+
 function readParam(schema: ParameterSchema, params: Record<string, number>): number {
   const raw = params[schema.id];
   const candidate = raw !== undefined && Number.isFinite(raw) ? raw : schema.defaultValue;
@@ -262,6 +275,7 @@ export class ChordArpVoice implements VoiceInstance {
     const targetTimbre = readParam(TIMBRE_SHAPE_PARAM, params);
     const targetDetune = readParam(DETUNE_SHIMMER_PARAM, params);
     const softness = readParam(SOFTNESS_PARAM, params);
+    const droneHold = readParam(DRONE_HOLD_PARAM, params);
 
     const rootMidi = Number.isFinite(ctx.harmony.rootMidi) ? ctx.harmony.rootMidi : 36;
     const chordSrc = ctx.harmony.chordNotesMidi;
@@ -287,9 +301,11 @@ export class ChordArpVoice implements VoiceInstance {
     const pulseEnergy = Number.isFinite(ctx.timeFrame.pulseEnergy)
       ? clamp(ctx.timeFrame.pulseEnergy, 0, 1)
       : 0;
+    const shapedPulse = pulseEnergy * (0.35 + 0.65 * pulseEnergy);
+    const effectivePulse = shapedPulse + droneHold * (1 - shapedPulse);
     const warpedPhase = wrapPhase01(ctx.timeFrame.warpedPhase);
 
-    const envMs = clamp(softness * 1000, 5, 800);
+    const envMs = clamp(softness * 450, 4, 400);
     if (Math.abs(envMs - this.lastEnvMs) > 0.1) {
       this.lastEnvMs = envMs;
       this.voiceEnvCoeff = Math.exp(-1 / (envMs * 0.001 * this.sampleRate));
@@ -309,7 +325,7 @@ export class ChordArpVoice implements VoiceInstance {
             ? chordSrc[v % chordSrc.length]! + (v >= chordSrc.length ? 12 : 0)
             : rootMidi + 12 + (v === 0 ? 0 : v === 1 ? 3 : v === 2 ? 7 : 12);
         this.voiceTargetMidi[v] = chordMidi;
-        this.voiceArpGate[v] = 0.38 + 0.62 * pulseEnergy;
+        this.voiceArpGate[v] = effectivePulse;
       }
       this.lastArpStep = currentArpStep;
     } else {
@@ -326,8 +342,8 @@ export class ChordArpVoice implements VoiceInstance {
 
       const activeGate =
         Math.exp(-stepFrac * (1.0 + (1 - clamp(softness / 0.8, 0, 1)) * 3.8)) *
-        (0.45 + 0.55 * pulseEnergy);
-      const chordPadGate = 0.38 + 0.62 * pulseEnergy;
+        effectivePulse;
+      const chordPadGate = effectivePulse;
 
       for (let v = 0; v < NUM_VOICES; v++) {
         if (v === this.roundRobinIdx) {
@@ -336,7 +352,7 @@ export class ChordArpVoice implements VoiceInstance {
         } else {
           // Non-active voices sustain gently in chord mode and decay smoothly in arp mode
           const decayTail =
-            (1 - targetMorph) * chordPadGate + targetMorph * 0.14 * pulseEnergy;
+            (1 - targetMorph) * chordPadGate + targetMorph * 0.14 * effectivePulse;
           this.voiceArpGate[v] = decayTail;
           if (targetMorph < 0.35) {
             const chordMidi =
@@ -549,6 +565,7 @@ export const chordArpVoiceModule: VoiceModule = {
     TIMBRE_SHAPE_PARAM,
     DETUNE_SHIMMER_PARAM,
     SOFTNESS_PARAM,
+    DRONE_HOLD_PARAM,
   ],
   createInstance(sampleRate: number): VoiceInstance {
     return new ChordArpVoice(sampleRate);

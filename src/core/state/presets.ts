@@ -47,6 +47,28 @@ function defaultVoiceParams(voiceModuleId: string): Record<string, number> {
         timbreShape: 0.35,
         detuneShimmer: 0.35,
         softness: 0.14,
+        droneHold: 0,
+      };
+    case 'modal-bell':
+      return {
+        material: 0.82,
+        malletHardness: 0.6,
+        decay: 0.8,
+        shimmer: 0.38,
+        octaveShift: 1,
+        melodyPattern: 1,
+        melodyRange: 0.5,
+      };
+    case 'pipe-organ':
+      return {
+        register: 0.58,
+        chiff: 0.38,
+        tremolo: 0.28,
+        release: 0.32,
+        droneHold: 0,
+        voiceMode: 0,
+        octaveShift: 1,
+        melodyPattern: 1,
       };
     default:
       return {};
@@ -96,6 +118,7 @@ function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
         interferenceMix: 0,
         phaseOffset: 0,
         threshold: 0,
+        waveShape: 0,
       },
     },
   ];
@@ -869,5 +892,204 @@ export function createChordToOffbeatArpPreset(): BeatSnapshot {
     },
     curves: [curveMorph],
     layers: [kick, arpLayer],
+  };
+}
+
+/**
+ * Bells & Organ dual-voice preset in A-Dorian at 126 BPM:
+ * straight 4/4 kick + sub-pulse, offbeat modal-bell glockenspiel,
+ * and pipe-organ layered with a secondary modal-bell voice.
+ */
+export function createBellsAndOrganPreset(): BeatSnapshot {
+  // L1: Kick 4/4 Anker
+  const l1Base = createDefaultLayer('L1 Kick 4/4 Anker', 'pulse-texture', 4, 'beats');
+  const l1Ops = updateOperator(
+    updateOperator(l1Base.timeOperators, 'time-pulse-interference', {
+      params: { freqA: 4, freqB: 4, interferenceMix: 0, phaseOffset: 0, threshold: 0 },
+    }),
+    'time-grid-gravity',
+    { params: { subdivisions: 4, phaseShift: 0, gravity: 0 } },
+  );
+  const l1Chain = updateCard(
+    updateCard(l1Base.processorChain, 'card-tone-filter', {
+      params: { brightness: 0.44, focus: 0.18, filterMode: 0, tilt: -0.2 },
+    }),
+    'card-eq-orbit',
+    { params: { lowDb: 2, midDb: -1, highDb: -2, stereoOrbit: 0.2 } },
+  );
+  const l1: LayerConfig = {
+    ...l1Base,
+    id: 'bo_kick',
+    color: '#ff6b4a',
+    level: 0.88,
+    timeOperators: l1Ops,
+    voice: {
+      ...l1Base.voice,
+      params: {
+        bodyAir: 0.08,
+        punchDrop: 0.82,
+        decay: 0.25,
+        snap: 0.7,
+        pitchOffset: -12,
+        toneColor: 0.18,
+      },
+    },
+    processorChain: l1Chain,
+  };
+
+  // L2: Sub-Puls
+  const l2Base = createDefaultLayer('L2 Sub-Puls', 'sub-motion', 4, 'beats');
+  const l2Ops = updateOperator(
+    updateOperator(l2Base.timeOperators, 'time-grid-gravity', {
+      params: { subdivisions: 4, phaseShift: 0.5, gravity: 0.7 },
+    }),
+    'time-pulse-interference',
+    { params: { freqA: 8, freqB: 4, interferenceMix: 0.3, phaseOffset: 0.5, threshold: 0.4 } },
+  );
+  const l2Chain = updateCard(l2Base.processorChain, 'card-tone-filter', {
+    params: { brightness: 0.46, focus: 0.3, filterMode: 0, tilt: -0.25 },
+  });
+  const l2: LayerConfig = {
+    ...l2Base,
+    id: 'bo_sub',
+    color: '#38bdf8',
+    level: 0.75,
+    timeOperators: l2Ops,
+    voice: {
+      ...l2Base.voice,
+      params: {
+        subWarmth: 0.8,
+        phaseBite: 0.25,
+        glide: 0.03,
+        octaveShift: -1,
+        autoDuck: 0.65,
+        sustainHold: 0.55,
+      },
+    },
+    processorChain: l2Chain,
+  };
+
+  // L3: Offbeat-Glockenspiel
+  const l3Base = createDefaultLayer('L3 Offbeat-Glockenspiel', 'modal-bell', 4, 'beats');
+  const l3Ops = updateOperator(
+    updateOperator(l3Base.timeOperators, 'time-grid-gravity', {
+      params: { subdivisions: 4, phaseShift: 0, gravity: 0 },
+    }),
+    'time-pulse-interference',
+    { params: { freqA: 4, freqB: 4, interferenceMix: 1, phaseOffset: 0.5, threshold: 0.15 } },
+  );
+  const l3Chain = updateCard(
+    updateCard(
+      updateCard(
+        updateCard(l3Base.processorChain, 'card-tone-filter', {
+          params: { brightness: 0.78, focus: 0.3, filterMode: 0, tilt: 0.2 },
+        }),
+        'card-tempo-echo',
+        { bypassed: false, params: { mix: 0.26, division: 1, feedback: 0.42, darkening: 0.4, pingPong: 1 } },
+      ),
+      'card-ducking-hall',
+      { bypassed: false, params: { mix: 0.28, size: 0.62, decay: 0.68, brightness: 0.6, duckAmount: 0.55 } },
+    ),
+    'card-eq-orbit',
+    { params: { lowDb: -4, midDb: 0.5, highDb: 2, stereoOrbit: 1.2 } },
+  );
+  const l3: LayerConfig = {
+    ...l3Base,
+    id: 'bo_glockenspiel',
+    color: '#f59e0b',
+    level: 0.66,
+    pan: -0.15,
+    timeOperators: l3Ops,
+    voice: {
+      ...l3Base.voice,
+      params: {
+        material: 0.88,
+        malletHardness: 0.65,
+        decay: 0.9,
+        shimmer: 0.42,
+        octaveShift: 1,
+        melodyPattern: 2,
+        melodyRange: 0.55,
+      },
+    },
+    processorChain: l3Chain,
+  };
+
+  // L4: Orgelpipes + Glocke-Mix (Dual-Voice Combination)
+  const l4Base = createDefaultLayer('L4 Orgelpipes + Glocke-Mix', 'pipe-organ', 8, 'beats');
+  const l4Ops = updateOperator(
+    updateOperator(l4Base.timeOperators, 'time-grid-gravity', {
+      params: { subdivisions: 4, phaseShift: 0, gravity: 0.35 },
+    }),
+    'time-pulse-interference',
+    { params: { freqA: 4, freqB: 2, interferenceMix: 0.35, phaseOffset: 0, threshold: 0.2 } },
+  );
+  const l4Chain = updateCard(
+    updateCard(
+      updateCard(
+        updateCard(l4Base.processorChain, 'card-tone-filter', {
+          params: { brightness: 0.7, focus: 0.28, filterMode: 0, tilt: 0.12 },
+        }),
+        'card-tempo-echo',
+        { bypassed: false, params: { mix: 0.2, division: 2, feedback: 0.38, darkening: 0.48, pingPong: 1 } },
+      ),
+      'card-ducking-hall',
+      { bypassed: false, params: { mix: 0.34, size: 0.72, decay: 0.74, brightness: 0.55, duckAmount: 0.62 } },
+    ),
+    'card-eq-orbit',
+    { params: { lowDb: -2, midDb: 1, highDb: 1.5, stereoOrbit: 1.15 } },
+  );
+  const l4: LayerConfig = {
+    ...l4Base,
+    id: 'bo_organ_bell',
+    color: '#a855f7',
+    level: 0.68,
+    pan: 0.14,
+    timeOperators: l4Ops,
+    voice: {
+      ...l4Base.voice,
+      params: {
+        register: 0.62,
+        chiff: 0.42,
+        tremolo: 0.32,
+        release: 0.35,
+        droneHold: 0,
+        voiceMode: 0,
+        octaveShift: 1,
+        melodyPattern: 1,
+      },
+    },
+    secondaryVoice: {
+      enabled: true,
+      moduleId: 'modal-bell',
+      version: 1,
+      mix: 0.32,
+      params: {
+        material: 0.72,
+        malletHardness: 0.5,
+        decay: 0.7,
+        shimmer: 0.35,
+        octaveShift: 2,
+        melodyPattern: 1,
+        melodyRange: 0.35,
+      },
+    },
+    processorChain: l4Chain,
+  };
+
+  return {
+    id: 'snap_bells_and_organ',
+    tempoBpm: 126,
+    timeSignature: { numerator: 4, denominator: 4 },
+    masterGain: 0.9,
+    masterGlue: 0.24,
+    harmony: {
+      rootNote: 9,
+      scaleId: 'dorian',
+      chordPreset: 'minor7',
+      progressionId: 'classic_i_VI_VII_i',
+    },
+    curves: [],
+    layers: [l1, l2, l3, l4],
   };
 }

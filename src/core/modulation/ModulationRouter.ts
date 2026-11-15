@@ -579,8 +579,8 @@ export class ModulationRouter {
         if (!entry) {
           return isMultiply ? 1 : 0;
         }
-        const cycleVal = cfg.cycleValue ?? entry.curve.cycleValue;
-        const cycleUnit = cfg.cycleUnit ?? entry.curve.cycleUnit;
+        const cycleVal = entry.curve.cycleValue ?? cfg.cycleValue ?? 4;
+        const cycleUnit = entry.curve.cycleUnit ?? cfg.cycleUnit ?? 'beats';
         const phaseOffset = Number.isFinite(cfg.phaseOffset) ? cfg.phaseOffset! : 0;
         const cycleBeats = cycleToBeats(cycleVal, cycleUnit, beatsPerBar);
         const phase = wrapPhase01(

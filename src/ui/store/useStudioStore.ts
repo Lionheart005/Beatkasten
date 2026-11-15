@@ -4,6 +4,7 @@ import { defaultRegistry } from '../../core/defaultRegistry';
 import { DEFAULT_CURVE_PRESETS, type DrawnCurveData } from '../../core/math/curves';
 import {
   commitSnapshot,
+  createBellsAndOrganPreset,
   createHypnoticAMinorProject,
   createInitialHistory,
   createDefaultLayer,
@@ -435,6 +436,14 @@ export function useStudioStore() {
           ...src.voice,
           params: { ...src.voice.params },
         },
+        ...(src.secondaryVoice
+          ? {
+              secondaryVoice: {
+                ...src.secondaryVoice,
+                params: { ...src.secondaryVoice.params },
+              },
+            }
+          : {}),
         timeOperators: clonedOps,
         processorChain: clonedChain,
         modulations: clonedMods,
@@ -717,7 +726,13 @@ export function useStudioStore() {
 
   // Starter Presets
   const applyStarterPreset = useCallback(
-    (presetKey: 'hypnotic-aminor' | 'triplet-riddle' | 'chord-offbeat-arp') => {
+    (
+      presetKey:
+        | 'hypnotic-aminor'
+        | 'triplet-riddle'
+        | 'chord-offbeat-arp'
+        | 'bells-organ',
+    ) => {
       flushPendingCommit();
       if (presetKey === 'hypnotic-aminor') {
         const doc = createHypnoticAMinorProject();
@@ -733,6 +748,14 @@ export function useStudioStore() {
         commitSnapshotImmediate(() => snap, 'Preset: Triolen-Rätsel');
         setSelectedLayerId(snap.layers[0]?.id ?? '');
         showNotice('Preset geladen: Triolen-Rätsel (3/5/7 Beats)');
+      } else if (presetKey === 'bells-organ') {
+        const snap = createBellsAndOrganPreset();
+        commitSnapshotImmediate(() => snap, 'Preset: Glocken & Orgel');
+        setSelectedLayerId(
+          snap.layers[3]?.id ?? snap.layers[2]?.id ?? snap.layers[0]?.id ?? '',
+        );
+        setSelectedCurveId(snap.curves[0]?.id ?? '');
+        showNotice('Preset geladen: Glocken & Orgel (Offbeat + Dual-Mix)');
       } else {
         const snap = createChordToOffbeatArpPreset();
         commitSnapshotImmediate(() => snap, 'Preset: Akkord → Offbeat Arp');
