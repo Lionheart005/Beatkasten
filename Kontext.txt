@@ -1,0 +1,28 @@
+Ich habe folgende Idee:
+
+Ich will einen Soundgenerator für Techno beats bauen, der soll aber etwas anders aufgebaut sein, als typische Programme.
+Es soll keine Timeline im klassichen Sinne geben, sondern das ganze ist nur ein Beat generator, und mann kann song abschnitte definieren und beat einstellungen speichern bzw also für jeden abschnitt keine sound spur, sondern nur die konfiguration der filter und erzeugung und dann am ende als mp3 exportieren.
+
+man gibt also am anfang an welche taktart und kann dann für jeden schlag den beat anpassen, das ganze aber eben nicht indem man einzelne clips mit filtern belegt oder andere sampels und presets lädt
+sondern jeder beat wird simpel mathematisch aus sinus und cosius wellen erzeugt, live im programm quasi und einem stehen mehere filter und operatoren zur verfügung diese wellen anzupassen. dabei ist aber jeder filter schon standardmäßig aktiv, und man kann selbst einfach mit den verschiedenen reglern rumspielen. 
+
+es geht also quasi darum, dass in diesem programm nicht mehr jede einzelne note und jedes sound sampel einzeln vom nutzer erzeugt wird, sondern einfach eine mathematische wellenfunktion die sich periodisch widerholt durch verschiedenste mathematische operationen manipuliert wird.
+(dabei sollte es natürlich trotzdem relativ gute voreinstellungen und auch grenzen geben, damit es immer noch das muster von Bass und oberstimme gibt, aber dennoch genug freiheit dass man sich kreativ komplett austoben kann. es bringt nur nichts am ende ein fiepen und flirren erzeugt zu haben und nicht mehr zu wissen durch welche mathe operatoren man jetzt wieder ein bass erzeugt)
+dabei soll das front end, also die bedienung aber nichts mit mathe zu tun haben und kein mathe vorwissen voraussetzen, sondern mit ein paar dutzdend reglern mit sinvollen boundaries und beschreibungen kontrollierbar sein.
+
+eine sache ist dabei natürlcih auch noch wichtig: die es muss verschiedene wellen geben, die man übereinander legt, die ein vielfaches der länge sind des grund beats. 
+vielleicht wäre ein layer aufbau der bedienoberfläche sinvoll, also dass man beliebig viele wellen stacken kann und jede einzelne mit entsprechenden reglern manipulieren und verändern und jede welle aber fest die so und so viel fache länge des grundbeats hat?
+udn auch wäre wichtig, dass man dennoch voreinstellungen vornehmen kann wie eine triole oder of beat oder so, dass man nicht ewig rumprobieren muss bis man das findet, sondern das übersichtlich und einfach zu bedienen ist. das ist wahrscheinlich die größte schwierigkeit, dass man wenn man eine die hat auch rausbekommt wie man sie umsetzten kann(zb. ich will einen stehenden a moll akkord der dann anfängt langsam in ein apeggio überzugehen und immer schneller wird und dann im off beat ankommt und weiter läuft. [... bis er sich wiederholt])
+
+auch wären cool wie features, dass man per hand kurven in einem koordinatensystem zeichnen kann die dann addiert oder multipliziert werden mit der aktuellen welle, aber auch leicht wieder verändert oder rückgängig gemacht werden können,
+ich habe sonst angst, dass man sich verliert und nicht mehr weiß wie man zurück zu einem coolen beat kommt, also die history von aktionen sollte gut dokumentiert und zugänglich sein damit der user auch einfach in verschiedene zustände zurückskippen kann. 
+
+mir ist klar, dass das auch nur eine art von synthesiser ist, aber ich will dass das programm einmal ganz von vorne versucht lösungen und gestaltung und bedieung neu zu denken, im sinne von, ein Techno beat ist eben nicht mehr musik im typischen sinne wo jede note gesetzt wird, sondern eine regelmäßige struktur
+
+das ganze soll natürlich so aufgebaut sein, dass man am ende verschiedene beats die man produziert hat als wav exportiert und dann in einem herkömmlichen programm zusammensetzt und per hand eine eigene melodie drüber spielt oder übergänge und drops organisiert.
+
+das ganze soll durchaus ein bisschen musiktheorie verständniss voraussetzten, aber kein technisches und soundengineur verständnis.
+
+da ich selber klassicher musiker bin habe ich ahnung von musiktheorie, aber keine ahnung von sound system fachbegriffen und möchte das programm frustfrei bedienen können.
+
+natürlich brauch das auch eine projekt und ordnerstruktur.
