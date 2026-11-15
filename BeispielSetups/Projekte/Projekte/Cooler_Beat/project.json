@@ -2,7 +2,7 @@
   "id": "proj_mwi0ejmx_1",
   "name": "Cooler Beat",
   "version": 1,
-  "updatedAt": 1794766651127,
+  "updatedAt": 1794769857431,
   "activeSnapshot": {
     "id": "snap_hypnotic_aminor_main",
     "tempoBpm": 130,
@@ -16,7 +16,55 @@
       "rootNote": 9,
       "scaleId": "natural_minor",
       "chordPreset": "minor7",
-      "progressionId": "classic_i_VI_VII_i"
+      "progressionId": "classic_i_VI_VII_i",
+      "progressionMode": "custom",
+      "customSteps": [
+        {
+          "id": "chord_mwi65niy_1",
+          "degree": 0,
+          "accidental": 0,
+          "chordType": "minor",
+          "durationBeats": 8,
+          "transitionType": "cut",
+          "transitionBeats": 0
+        },
+        {
+          "id": "chord_mwi6d1cw_6",
+          "degree": 3,
+          "accidental": 0,
+          "chordType": "minor",
+          "durationBeats": 8,
+          "transitionType": "cut",
+          "transitionBeats": 0
+        },
+        {
+          "id": "chord_mwi6b2zq_3",
+          "degree": 1,
+          "accidental": 0,
+          "chordType": "minor",
+          "durationBeats": 4,
+          "transitionType": "glide",
+          "transitionBeats": 0.5
+        },
+        {
+          "id": "chord_mwi6bgb6_4",
+          "degree": 6,
+          "accidental": 0,
+          "chordType": "auto",
+          "durationBeats": 4,
+          "transitionType": "cut",
+          "transitionBeats": 0
+        },
+        {
+          "id": "chord_mwi6cj36_5",
+          "degree": 4,
+          "accidental": 0,
+          "chordType": "auto",
+          "durationBeats": 8,
+          "transitionType": "cut",
+          "transitionBeats": 0
+        }
+      ]
     },
     "curves": [
       {
@@ -136,24 +184,24 @@
         "name": "Kurve 5",
         "points": [
           {
-            "x": 0.125,
-            "y": 0.4334590517241379
+            "x": 0.04788732394366197,
+            "y": 0.3352640086206896
           },
           {
             "x": 0.292817679558011,
             "y": 0.21794181034482762
           },
           {
-            "x": 0.5,
-            "y": 0.5282866379310345
+            "x": 0.5380281690140845,
+            "y": 0.3352640086206896
           },
           {
-            "x": 0.6160220994475138,
-            "y": 0.830010775862069
+            "x": 0.704225352112676,
+            "y": 0.6283674568965517
           },
           {
-            "x": 0.9337016574585635,
-            "y": 0.8386314655172413
+            "x": 0.9183098591549296,
+            "y": 0.40422952586206895
           }
         ],
         "cycleValue": 4,
@@ -241,6 +289,31 @@
         "cycleValue": 8,
         "cycleUnit": "bars",
         "snapDivision": 8
+      },
+      {
+        "id": "curve_mwi6osn0_a",
+        "name": "Kurve 8",
+        "points": [
+          {
+            "x": 0,
+            "y": 0.1
+          },
+          {
+            "x": 0.35,
+            "y": 0.25
+          },
+          {
+            "x": 0.7,
+            "y": 0.65
+          },
+          {
+            "x": 0.95,
+            "y": 0.9
+          }
+        ],
+        "cycleValue": 16,
+        "cycleUnit": "bars",
+        "snapDivision": 8
       }
     ],
     "layers": [
@@ -251,7 +324,7 @@
         "enabled": true,
         "muted": false,
         "solo": false,
-        "level": 0.65,
+        "level": 0.91,
         "pan": 0,
         "cycleLength": {
           "value": 4,
@@ -774,7 +847,7 @@
         "enabled": true,
         "muted": false,
         "solo": false,
-        "level": 0.7,
+        "level": 0.77,
         "pan": 0,
         "cycleLength": {
           "value": 4,
@@ -937,7 +1010,7 @@
         "name": "Sub-Bewegung 5",
         "color": "#f59e0b",
         "enabled": true,
-        "muted": true,
+        "muted": false,
         "solo": false,
         "level": 0.45,
         "pan": 0,
@@ -1102,7 +1175,7 @@
         "name": "Sub-Bewegung 5 (Kopie)",
         "color": "#f59e0b",
         "enabled": true,
-        "muted": true,
+        "muted": false,
         "solo": false,
         "level": 0.34,
         "pan": 0,
@@ -1267,9 +1340,9 @@
         "name": "Akkord & Arpeggio 7",
         "color": "#ff6b4a",
         "enabled": true,
-        "muted": true,
+        "muted": false,
         "solo": false,
-        "level": 0.73,
+        "level": 0.8,
         "pan": 0,
         "cycleLength": {
           "value": 24,
@@ -1443,7 +1516,8 @@
             "depth": 0.69,
             "id": "mod_mwi2a4zi_11"
           }
-        ]
+        ],
+        "group": "Harmonie"
       },
       {
         "id": "layer_mwi5fkm4ta5_9",
@@ -1452,7 +1526,7 @@
         "enabled": true,
         "muted": false,
         "solo": false,
-        "level": 0.8,
+        "level": 0.67,
         "pan": 0,
         "cycleLength": {
           "value": 8,
@@ -1522,12 +1596,12 @@
           "moduleId": "modal-bell",
           "version": 1,
           "params": {
-            "material": 0.82,
-            "malletHardness": 0.6,
+            "material": 1,
+            "malletHardness": 0.32,
             "decay": 1.5157634375026832,
-            "shimmer": 0.68,
-            "octaveShift": 1,
-            "melodyPattern": 3,
+            "shimmer": 0.69,
+            "octaveShift": 0,
+            "melodyPattern": 1,
             "melodyRange": 0.89
           }
         },
@@ -1551,7 +1625,7 @@
             "bypassed": false,
             "params": {
               "warmthGrit": 0.2,
-              "wavefold": 0.06
+              "wavefold": 0.1
             }
           },
           {
@@ -1560,8 +1634,8 @@
             "version": 1,
             "bypassed": false,
             "params": {
-              "bodyResonance": 0.1,
-              "bodyCharacter": 0.35,
+              "bodyResonance": 0.65,
+              "bodyCharacter": 0.82,
               "sandDust": 0.04
             }
           },
@@ -1604,9 +1678,352 @@
             }
           }
         ],
+        "modulations": [],
+        "group": "Harmonie"
+      },
+      {
+        "id": "layer_mwi5fkm4ta5_b",
+        "name": "Akkord & Arpeggio 9",
+        "color": "#ec4899",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.88,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwi5fkm4ta5_b_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "chord-arp",
+          "version": 1,
+          "params": {
+            "chordArpMorph": 1,
+            "arpSpeed": 32,
+            "arpPattern": 3,
+            "octaveSpread": 1.65,
+            "timbreShape": 0,
+            "detuneShimmer": 0.75,
+            "softness": 0.005,
+            "droneHold": 1,
+            "arpGrid": 3
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwi5fkm4ta5_b_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.28,
+              "focus": 0.57,
+              "filterMode": 0,
+              "tilt": 0.03
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.6,
+              "wavefold": 0.19
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.58,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 11.95,
+              "midDb": 12,
+              "highDb": 12,
+              "stereoOrbit": 1
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_b_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [
+          {
+            "label": "Klang-Fülle Bewegung",
+            "enabled": true,
+            "sourceType": "drawn-curve",
+            "sourceConfig": {
+              "waveform": "sine",
+              "phaseOffset": 0,
+              "sourceLayerId": "layer_d",
+              "curveId": "curve_mwi6osn0_a"
+            },
+            "targetDomain": "voice",
+            "targetCardId": "voice",
+            "targetParamId": "timbreShape",
+            "combineMode": "add",
+            "depth": 1,
+            "id": "mod_mwi6p3rs_b"
+          }
+        ]
+      },
+      {
+        "id": "layer_mwi5fkm4ta5_c",
+        "name": "Glocke & Mallet 10",
+        "color": "#ff6b4a",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 1.06,
+        "pan": 0,
+        "cycleLength": {
+          "value": 2,
+          "unit": "bars"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwi5fkm4ta5_c_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 1,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 8,
+              "freqB": 1,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 8,
+              "euclidHits": 3,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "modal-bell",
+          "version": 1,
+          "params": {
+            "material": 0,
+            "malletHardness": 0.77,
+            "decay": 0.19436597625698376,
+            "shimmer": 0,
+            "octaveShift": 2,
+            "melodyPattern": 2,
+            "melodyRange": 0.59
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwi5fkm4ta5_c_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.33,
+              "focus": 0,
+              "filterMode": 0,
+              "tilt": 0.53
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0,
+              "wavefold": 0.33
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.43,
+              "bodyCharacter": 0.36,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 12,
+              "midDb": 12,
+              "highDb": 12,
+              "stereoOrbit": 1
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_c_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
         "modulations": []
       }
     ]
   },
-  "activeHistoryNodeId": "hist_mwi5q2cr_3s_7wp9"
+  "activeHistoryNodeId": "hist_mwi7msrh_ns_73uo"
 }

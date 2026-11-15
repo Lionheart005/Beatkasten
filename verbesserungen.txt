@@ -1,12 +1,6 @@
-layer als gruppe organisierbar machen und verschieben für übersicht.
+song abschnitte verschieben und klar anzeigen welcher gerade aktiv. und automatisch die veränderungen in den aktuellen abschnitt synchronisieren.
+und man soll layer aus verschiedenen abschnitten kopieren können
+und beim export auch alle abschnitte hintereinander rendern können. also nicht nur layer dublizieren sondern auch kopieren option. 
+während es rendert audio absipelen im hintergrund stoppen 
 
-wenn man in säule 2 regler verschieben will, dann schiebt sich die ganze kachel weg, das ausstellen, die pfeile reichen zum sortieren.
-
-appegio tempo noch viel schneller möglich machen
-
-die glocken klingen irgenwie komplett verzerrt und unschön und buggen komplett, wenn man sie hinzufügt, dann kann man sie nicht mehr entfernen, sie sind an random andere layer gebunden und gleichzeitig mit ihnen ausgewählt oder andere dinge.
-
-export loop muss auch länger als die paar takte sein. 
-
-das projekt abspeichern ist ein bisschen doof, weil erst noch der unterordner projekte erstellt wird, und man nicht versteht ob jetzt das projekt gespeichert wurde oder nicht, deshalb speichert man projekte die ganze zeit doppelt, das ist ein bisschen merkwürdig, das kann übersichtlicher gehen 
-
+bei orgel und allen die irgendwie mit melodie haben ncoh mehr einstellungen und optionen hinzufügen wie die springen (pendel und random reicht nicht, soll noch mehr deteiliertere einstellungen geben wie geschwindigkeit oder auch dort arpeggio)

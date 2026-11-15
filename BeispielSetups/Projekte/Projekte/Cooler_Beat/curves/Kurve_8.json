@@ -1,0 +1,25 @@
+{
+  "id": "curve_mwi6osn0_a",
+  "name": "Kurve 8",
+  "points": [
+    {
+      "x": 0,
+      "y": 0.1
+    },
+    {
+      "x": 0.35,
+      "y": 0.25
+    },
+    {
+      "x": 0.7,
+      "y": 0.65
+    },
+    {
+      "x": 0.95,
+      "y": 0.9
+    }
+  ],
+  "cycleValue": 16,
+  "cycleUnit": "bars",
+  "snapDivision": 8
+}
