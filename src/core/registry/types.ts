@@ -1,0 +1,156 @@
+export type ControlDomain = 'time' | 'timbre' | 'space' | 'harmony' | 'modulation';
+
+export type ParamCurve = 'linear' | 'exp' | 'bipolar';
+
+export interface ParameterOption {
+  readonly value: number;
+  readonly label: string;
+}
+
+export interface ParameterSchema {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly domain: ControlDomain;
+  readonly min: number;
+  readonly max: number;
+  readonly defaultValue: number;
+  readonly step?: number;
+  readonly curve?: ParamCurve;
+  readonly modulatable: boolean;
+  readonly unitLabel?: string;
+  readonly options?: readonly ParameterOption[];
+}
+
+export interface ModuleDescriptor {
+  readonly id: string;
+  readonly version: number;
+  readonly displayName: string;
+  readonly description: string;
+  readonly parameters: readonly ParameterSchema[];
+}
+
+export interface TimeEvalContext {
+  readonly beatPosition: number;
+  readonly barPosition: number;
+  readonly layerPhase: number;
+  readonly cycleIndex: number;
+  readonly cycleBeats: number;
+  readonly beatsPerBar: number;
+  readonly sampleRate: number;
+}
+
+export interface TimeFrame {
+  readonly warpedPhase: number;
+  readonly pulseEnergy: number;
+  readonly triggerIntensity: number;
+  readonly accent: number;
+  readonly stepIndex: number;
+}
+
+export interface MutableTimeFrame {
+  warpedPhase: number;
+  pulseEnergy: number;
+  triggerIntensity: number;
+  accent: number;
+  stepIndex: number;
+}
+
+export interface TimeOperatorModule extends ModuleDescriptor {
+  evaluateTime(
+    ctx: TimeEvalContext,
+    params: Record<string, number>,
+    prevFrame: TimeFrame,
+  ): TimeFrame;
+  /**
+   * Optional zero-allocation variant writing the next frame into `outFrame`.
+   * Audio hot paths prefer this when available to avoid per-subblock allocations.
+   */
+  evaluateTimeInto?(
+    ctx: TimeEvalContext,
+    params: Record<string, number>,
+    prevFrame: TimeFrame,
+    outFrame: MutableTimeFrame,
+  ): void;
+}
+
+export interface HarmonyFrame {
+  readonly rootNote: number;
+  readonly rootMidi: number;
+  readonly scaleId: string;
+  readonly chordPreset: string;
+  readonly scaleNotesMidi: readonly number[];
+  readonly chordNotesMidi: readonly number[];
+}
+
+export interface VoiceRenderContext {
+  readonly sampleRate: number;
+  readonly numSamples: number;
+  readonly beatPosition: number;
+  readonly beatsPerBar: number;
+  readonly timeFrame: TimeFrame;
+  readonly harmony: HarmonyFrame;
+  readonly prevPulseTrigger: number;
+}
+
+export interface VoiceInstance {
+  reset(): void;
+  process(
+    outL: Float32Array,
+    outR: Float32Array,
+    params: Record<string, number>,
+    ctx: VoiceRenderContext,
+  ): void;
+}
+
+export interface VoiceModule extends ModuleDescriptor {
+  readonly category: 'rhythm' | 'bass' | 'harmony' | 'texture';
+  createInstance(sampleRate: number): VoiceInstance;
+}
+
+export interface ProcessorContext {
+  readonly sampleRate: number;
+  readonly numSamples: number;
+  readonly bpm: number;
+  readonly harmony: HarmonyFrame;
+  readonly layerPulseEnergy: number;
+  readonly layerTrigger: number;
+}
+
+export interface ProcessorInstance {
+  reset(): void;
+  process(
+    bufL: Float32Array,
+    bufR: Float32Array,
+    params: Record<string, number>,
+    ctx: ProcessorContext,
+  ): void;
+}
+
+export interface ProcessorModule extends ModuleDescriptor {
+  readonly stage: 'shaper' | 'effect';
+  createInstance(sampleRate: number): ProcessorInstance;
+}
+
+/**
+ * Clamps a numeric parameter value to its schema bounds, falling back to
+ * `schema.defaultValue` when the input is NaN or non-finite.
+ */
+export function clampParam(schema: ParameterSchema, value: number): number {
+  const candidate = Number.isFinite(value) ? value : schema.defaultValue;
+  const safeCandidate = Number.isFinite(candidate) ? candidate : schema.min;
+  if (safeCandidate < schema.min) return schema.min;
+  if (safeCandidate > schema.max) return schema.max;
+  return safeCandidate;
+}
+
+/**
+ * Builds a default parameter map for a module descriptor using clamped default values.
+ */
+export function buildDefaultParams(module: ModuleDescriptor): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const param of module.parameters) {
+    result[param.id] = clampParam(param, param.defaultValue);
+  }
+  return result;
+}
