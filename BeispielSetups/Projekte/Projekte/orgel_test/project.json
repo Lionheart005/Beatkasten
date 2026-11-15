@@ -1,0 +1,432 @@
+{
+  "id": "proj_hypnotic_a_minor",
+  "name": "orgel test",
+  "version": 1,
+  "updatedAt": 1794778147695,
+  "activeSnapshot": {
+    "id": "snap_chord_to_offbeat_arp",
+    "tempoBpm": 128,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "masterGain": 0.9,
+    "masterGlue": 0.25,
+    "harmony": {
+      "rootNote": 9,
+      "scaleId": "natural_minor",
+      "chordPreset": "minor7",
+      "progressionId": "static"
+    },
+    "curves": [
+      {
+        "id": "curve_chord_to_offbeat",
+        "name": "Akkord → Beschleunigung → Offbeat",
+        "cycleValue": 8,
+        "cycleUnit": "bars",
+        "snapDivision": 8,
+        "points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.25,
+            "y": 0.15
+          },
+          {
+            "x": 0.5,
+            "y": 0.55
+          },
+          {
+            "x": 0.75,
+            "y": 0.92
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "id": "coa_kick",
+        "name": "Kick-Fundament",
+        "color": "#38bdf8",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.86,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_p_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_p_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_p_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_p_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "pulse-texture",
+          "version": 1,
+          "params": {
+            "bodyAir": 0.08,
+            "punchDrop": 0.85,
+            "decay": 0.25,
+            "snap": 0.7,
+            "pitchOffset": -12,
+            "toneColor": 0.15
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_p_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.65,
+              "focus": 0.25,
+              "filterMode": 0,
+              "tilt": 0
+            }
+          },
+          {
+            "id": "layer_p_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_p_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.35,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_p_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 0,
+              "midDb": 0,
+              "highDb": 0,
+              "stereoOrbit": 1
+            }
+          },
+          {
+            "id": "layer_p_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_p_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [
+          {
+            "label": "Layer-Lautstärke (Pegel) (Layer-Mix) Bewegung",
+            "enabled": true,
+            "sourceType": "wave-lfo",
+            "sourceConfig": {
+              "waveform": "sine",
+              "cycleValue": 4,
+              "cycleUnit": "beats",
+              "phaseOffset": 0
+            },
+            "targetDomain": "voice",
+            "targetCardId": "layer-mix",
+            "targetParamId": "level",
+            "combineMode": "add",
+            "depth": 0.35,
+            "id": "mod_mwi114ly_1"
+          }
+        ]
+      },
+      {
+        "id": "coa_chord_arp",
+        "name": "A-Moll Akkord → Offbeat-Arp",
+        "color": "#a855f7",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.78,
+        "pan": 0,
+        "cycleLength": {
+          "value": 8,
+          "unit": "bars"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_q_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_q_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0.85
+            }
+          },
+          {
+            "id": "layer_q_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_q_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "chord-arp",
+          "version": 1,
+          "params": {
+            "chordArpMorph": 0,
+            "arpSpeed": 4,
+            "arpPattern": 0,
+            "octaveSpread": 2,
+            "timbreShape": 0.4,
+            "detuneShimmer": 0.45,
+            "softness": 0.15
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_q_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.38,
+              "focus": 0.35,
+              "filterMode": 0,
+              "tilt": 0
+            }
+          },
+          {
+            "id": "layer_q_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_q_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.35,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_q_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 0,
+              "midDb": 0,
+              "highDb": 0,
+              "stereoOrbit": 1
+            }
+          },
+          {
+            "id": "layer_q_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.26,
+              "division": 1,
+              "feedback": 0.45,
+              "darkening": 0.5,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_q_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.3,
+              "size": 0.65,
+              "decay": 0.65,
+              "brightness": 0.5,
+              "duckAmount": 0.65
+            }
+          }
+        ],
+        "modulations": [
+          {
+            "id": "coa_mod_morph",
+            "label": "Akkord → Arp Morph",
+            "enabled": true,
+            "sourceType": "drawn-curve",
+            "sourceConfig": {
+              "curveId": "curve_chord_to_offbeat",
+              "cycleValue": 8,
+              "cycleUnit": "bars"
+            },
+            "targetDomain": "voice",
+            "targetCardId": "voice",
+            "targetParamId": "chordArpMorph",
+            "combineMode": "add",
+            "depth": 0.9
+          },
+          {
+            "id": "coa_mod_warp",
+            "label": "Zeit-Beschleunigung",
+            "enabled": true,
+            "sourceType": "drawn-curve",
+            "sourceConfig": {
+              "curveId": "curve_chord_to_offbeat",
+              "cycleValue": 8,
+              "cycleUnit": "bars"
+            },
+            "targetDomain": "time",
+            "targetCardId": "layer_q_time_warp",
+            "targetParamId": "warpAmount",
+            "combineMode": "add",
+            "depth": 0.55
+          },
+          {
+            "id": "coa_mod_offbeat",
+            "label": "Offbeat-Einrasten",
+            "enabled": true,
+            "sourceType": "drawn-curve",
+            "sourceConfig": {
+              "curveId": "curve_chord_to_offbeat",
+              "cycleValue": 8,
+              "cycleUnit": "bars"
+            },
+            "targetDomain": "time",
+            "targetCardId": "layer_q_time_gravity",
+            "targetParamId": "phaseShift",
+            "combineMode": "add",
+            "depth": 0.5
+          },
+          {
+            "id": "coa_mod_bright",
+            "label": "Filter-Glanz",
+            "enabled": true,
+            "sourceType": "drawn-curve",
+            "sourceConfig": {
+              "curveId": "curve_chord_to_offbeat",
+              "cycleValue": 8,
+              "cycleUnit": "bars"
+            },
+            "targetDomain": "processor",
+            "targetCardId": "layer_q_card_tone",
+            "targetParamId": "brightness",
+            "combineMode": "add",
+            "depth": 0.48
+          }
+        ]
+      }
+    ]
+  },
+  "activeHistoryNodeId": "hist_mwi114lz_4_l53u"
+}

@@ -2,7 +2,7 @@
   "id": "proj_mwi0ejmx_1",
   "name": "Cooler Beat",
   "version": 1,
-  "updatedAt": 1794769857431,
+  "updatedAt": 1794778911539,
   "activeSnapshot": {
     "id": "snap_hypnotic_aminor_main",
     "tempoBpm": 130,
@@ -324,7 +324,7 @@
         "enabled": true,
         "muted": false,
         "solo": false,
-        "level": 0.91,
+        "level": 1.09,
         "pan": 0,
         "cycleLength": {
           "value": 4,
@@ -442,8 +442,8 @@
             "version": 1,
             "bypassed": false,
             "params": {
-              "lowDb": 0,
-              "midDb": 0,
+              "lowDb": 6.55,
+              "midDb": 3.5,
               "highDb": 0,
               "stereoOrbit": 1
             }
@@ -1687,7 +1687,7 @@
         "color": "#ec4899",
         "enabled": true,
         "muted": false,
-        "solo": false,
+        "solo": true,
         "level": 0.88,
         "pan": 0,
         "cycleLength": {
@@ -1867,7 +1867,7 @@
         "name": "Glocke & Mallet 10",
         "color": "#ff6b4a",
         "enabled": true,
-        "muted": true,
+        "muted": false,
         "solo": false,
         "level": 1.06,
         "pan": 0,
@@ -2025,5 +2025,5 @@
       }
     ]
   },
-  "activeHistoryNodeId": "hist_mwi7msrh_ns_73uo"
+  "activeHistoryNodeId": "hist_mwid0smu_38_86dd"
 }
