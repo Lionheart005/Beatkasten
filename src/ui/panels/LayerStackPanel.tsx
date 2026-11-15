@@ -2,11 +2,15 @@ import { useState, type CSSProperties } from 'react';
 import { Copy, Layers, Plus, Trash2 } from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
 import type { LayerConfig } from '../../core/state/types';
+import type { ActiveModTarget } from '../store/useStudioStore';
 
 interface LayerStackPanelProps {
   layers: readonly LayerConfig[];
   selectedLayerId: string;
+  activeModTarget: ActiveModTarget | null;
+  hoveredModSourceId: string | null;
   onSelectLayer: (layerId: string) => void;
+  onOpenModTarget: (target: ActiveModTarget) => void;
   onAddLayer: (voiceModuleId: string) => void;
   onDuplicateLayer: (layerId: string) => void;
   onDeleteLayer: (layerId: string) => void;
@@ -25,7 +29,10 @@ interface LayerStackPanelProps {
 export function LayerStackPanel({
   layers,
   selectedLayerId,
+  activeModTarget,
+  hoveredModSourceId,
   onSelectLayer,
+  onOpenModTarget,
   onAddLayer,
   onDuplicateLayer,
   onDeleteLayer,
@@ -160,76 +167,151 @@ export function LayerStackPanel({
               </div>
 
               {/* Level & Pan */}
-              <div
-                className="layer-controls-row"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <span className="muted-note" style={{ width: 28 }}>
-                  Pegel
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1.2}
-                  step={0.01}
-                  value={layer.level}
-                  style={{ '--slider-accent': layer.color } as CSSProperties}
-                  onChange={(e) =>
-                    onUpdateLayerLive(
-                      layer.id,
-                      (l) => ({ ...l, level: Number(e.target.value) }),
-                      `Pegel: ${layer.name}`,
-                    )
-                  }
-                />
-                <span
-                  className="schema-value"
-                  style={{ width: 32, textAlign: 'right' }}
-                >
-                  {Math.round(layer.level * 100)}
-                </span>
-              </div>
+              {(() => {
+                const renderMixTildeBtn = (
+                  paramId: 'level' | 'pan',
+                  label: string,
+                  min: number,
+                  max: number,
+                ) => {
+                  const routes = layer.modulations.filter(
+                    (m) =>
+                      m.enabled &&
+                      m.targetDomain === 'voice' &&
+                      m.targetCardId === 'layer-mix' &&
+                      m.targetParamId === paramId,
+                  );
+                  const isOpen =
+                    activeModTarget !== null &&
+                    activeModTarget.layerId === layer.id &&
+                    activeModTarget.targetDomain === 'voice' &&
+                    activeModTarget.targetCardId === 'layer-mix' &&
+                    activeModTarget.targetParamId === paramId;
+                  const isGlowing =
+                    hoveredModSourceId !== null &&
+                    routes.some(
+                      (r) =>
+                        r.sourceConfig.curveId === hoveredModSourceId ||
+                        r.sourceConfig.sourceLayerId === hoveredModSourceId ||
+                        r.id === hoveredModSourceId,
+                    );
+                  return (
+                    <button
+                      type="button"
+                      className={`mod-tilde-btn${routes.length > 0 ? ' has-routes' : ''}${
+                        isOpen ? ' is-open' : ''
+                      }${isGlowing ? ' is-mod-glow' : ''}`}
+                      style={{ '--mod-color': layer.color } as CSSProperties}
+                      title={
+                        routes.length > 0
+                          ? `${routes.length} aktive Bewegung(en) auf „${label}“ – klicken zum Bearbeiten`
+                          : `Bewegung (~) auf „${label}“ hinzufügen`
+                      }
+                      onClick={() => {
+                        onSelectLayer(layer.id);
+                        onOpenModTarget({
+                          layerId: layer.id,
+                          targetDomain: 'voice',
+                          targetCardId: 'layer-mix',
+                          targetParamId: paramId,
+                          label,
+                          min,
+                          max,
+                        });
+                      }}
+                    >
+                      ~{routes.length > 0 ? routes.length : ''}
+                    </button>
+                  );
+                };
 
-              <div
-                className="layer-controls-row"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <span className="muted-note" style={{ width: 28 }}>
-                  Pan
-                </span>
-                <input
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={layer.pan}
-                  style={{ '--slider-accent': layer.color } as CSSProperties}
-                  onChange={(e) =>
-                    onUpdateLayerLive(
-                      layer.id,
-                      (l) => ({ ...l, pan: Number(e.target.value) }),
-                      `Panorama: ${layer.name}`,
-                    )
-                  }
-                  onDoubleClick={() =>
-                    onCommitLayerImmediate(
-                      layer.id,
-                      (l) => ({ ...l, pan: 0 }),
-                      `Pan zentriert: ${layer.name}`,
-                    )
-                  }
-                />
-                <span
-                  className="schema-value"
-                  style={{ width: 32, textAlign: 'right' }}
-                >
-                  {Math.abs(layer.pan) < 0.03
-                    ? 'C'
-                    : layer.pan < 0
-                      ? `L${Math.round(Math.abs(layer.pan) * 100)}`
-                      : `R${Math.round(layer.pan * 100)}`}
-                </span>
-              </div>
+                return (
+                  <>
+                    <div
+                      className="layer-controls-row"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="muted-note" style={{ width: 28 }}>
+                        Pegel
+                      </span>
+                      {renderMixTildeBtn(
+                        'level',
+                        'Layer-Lautstärke (Pegel)',
+                        0,
+                        1.5,
+                      )}
+                      <input
+                        type="range"
+                        min={0}
+                        max={1.2}
+                        step={0.01}
+                        value={layer.level}
+                        style={{ '--slider-accent': layer.color } as CSSProperties}
+                        onChange={(e) =>
+                          onUpdateLayerLive(
+                            layer.id,
+                            (l) => ({ ...l, level: Number(e.target.value) }),
+                            `Pegel: ${layer.name}`,
+                          )
+                        }
+                      />
+                      <span
+                        className="schema-value"
+                        style={{ width: 32, textAlign: 'right' }}
+                      >
+                        {Math.round(layer.level * 100)}
+                      </span>
+                    </div>
+
+                    <div
+                      className="layer-controls-row"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="muted-note" style={{ width: 28 }}>
+                        Pan
+                      </span>
+                      {renderMixTildeBtn(
+                        'pan',
+                        'Layer-Panorama (Pan)',
+                        -1,
+                        1,
+                      )}
+                      <input
+                        type="range"
+                        min={-1}
+                        max={1}
+                        step={0.01}
+                        value={layer.pan}
+                        style={{ '--slider-accent': layer.color } as CSSProperties}
+                        onChange={(e) =>
+                          onUpdateLayerLive(
+                            layer.id,
+                            (l) => ({ ...l, pan: Number(e.target.value) }),
+                            `Panorama: ${layer.name}`,
+                          )
+                        }
+                        onDoubleClick={() =>
+                          onCommitLayerImmediate(
+                            layer.id,
+                            (l) => ({ ...l, pan: 0 }),
+                            `Pan zentriert: ${layer.name}`,
+                          )
+                        }
+                      />
+                      <span
+                        className="schema-value"
+                        style={{ width: 32, textAlign: 'right' }}
+                      >
+                        {Math.abs(layer.pan) < 0.03
+                          ? 'C'
+                          : layer.pan < 0
+                            ? `L${Math.round(Math.abs(layer.pan) * 100)}`
+                            : `R${Math.round(layer.pan * 100)}`}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           );
         })}

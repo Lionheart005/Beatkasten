@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Sparkles } from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
+import { LAYER_MIX_PARAMETERS } from '../../core/registry/types';
 import {
   DEFAULT_CURVE_PRESETS,
   evaluateDrawnCurve,
@@ -106,6 +107,17 @@ export function CurveDrawCanvas({
   const assignableTargets: AssignableTarget[] = useMemo(() => {
     if (!selectedLayer) return [];
     const list: AssignableTarget[] = [];
+
+    for (const p of LAYER_MIX_PARAMETERS) {
+      if (!p.modulatable) continue;
+      list.push({
+        key: `voice::layer-mix::${p.id}`,
+        domain: 'voice',
+        cardId: 'layer-mix',
+        paramId: p.id,
+        label: p.label,
+      });
+    }
 
     const voiceMod = defaultRegistry.getVoice(selectedLayer.voice.moduleId);
     if (voiceMod) {

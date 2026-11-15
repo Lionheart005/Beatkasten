@@ -30,6 +30,31 @@ export interface ModuleDescriptor {
   readonly parameters: readonly ParameterSchema[];
 }
 
+export const LAYER_MIX_PARAMETERS: readonly ParameterSchema[] = [
+  {
+    id: 'level',
+    label: 'Layer-Lautstärke (Pegel)',
+    description: 'Steuert die Ausgangslautstärke des gesamten Layers.',
+    domain: 'timbre',
+    min: 0,
+    max: 1.5,
+    defaultValue: 0.8,
+    curve: 'linear',
+    modulatable: true,
+  },
+  {
+    id: 'pan',
+    label: 'Layer-Panorama (Pan)',
+    description: 'Verteilt den Layer im Stereo-Bild (-1 = Links, 0 = Mitte, +1 = Rechts).',
+    domain: 'timbre',
+    min: -1,
+    max: 1,
+    defaultValue: 0,
+    curve: 'bipolar',
+    modulatable: true,
+  },
+];
+
 export interface TimeEvalContext {
   readonly beatPosition: number;
   readonly barPosition: number;

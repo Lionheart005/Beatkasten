@@ -74,6 +74,7 @@ export function ModulationDrawer({
           (m.targetCardId === target.targetCardId ||
             (target.targetDomain === 'voice' &&
               target.targetCardId !== 'secondary-voice' &&
+              target.targetCardId !== 'layer-mix' &&
               m.targetCardId === 'voice')),
       )
     : [];
@@ -337,48 +338,67 @@ export function ModulationDrawer({
         </div>
         {directRoutes.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {directRoutes.map((route) => (
-              <div
-                key={route.id}
-                className="mod-route-card"
-                onMouseEnter={() =>
-                  onHoverSource(
-                    route.sourceConfig.curveId ??
-                      route.sourceConfig.sourceLayerId ??
-                      route.id,
-                  )
-                }
-                onMouseLeave={() => onHoverSource(null)}
-              >
-                <div className="sub-card-head">
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm"
-                    style={{ padding: 0, fontWeight: 600 }}
-                    onClick={() =>
-                      onSelectTarget({
-                        layerId: layer.id,
-                        targetDomain: route.targetDomain as Exclude<
-                          typeof route.targetDomain,
-                          'modulation'
-                        >,
-                        targetCardId: route.targetCardId,
-                        targetParamId: route.targetParamId,
-                        label: route.targetParamId,
-                        min: 0,
-                        max: 1,
-                      })
-                    }
-                  >
-                    → {route.targetCardId === 'secondary-voice' ? 'Stimme B: ' : ''}
-                    {route.targetParamId}
-                  </button>
-                  <span className="schema-value">
-                    {SOURCE_LABELS[route.sourceType]} ({Math.round(route.depth * 100)}%)
-                  </span>
+            {directRoutes.map((route) => {
+              const isLayerMix = route.targetCardId === 'layer-mix';
+              const displayLabel = isLayerMix
+                ? route.targetParamId === 'level'
+                  ? 'Layer-Lautstärke (Pegel)'
+                  : route.targetParamId === 'pan'
+                    ? 'Layer-Panorama (Pan)'
+                    : route.targetParamId
+                : route.targetParamId;
+              const targetMin =
+                isLayerMix && route.targetParamId === 'pan' ? -1 : 0;
+              const targetMax =
+                isLayerMix && route.targetParamId === 'level' ? 1.5 : 1;
+              return (
+                <div
+                  key={route.id}
+                  className="mod-route-card"
+                  onMouseEnter={() =>
+                    onHoverSource(
+                      route.sourceConfig.curveId ??
+                        route.sourceConfig.sourceLayerId ??
+                        route.id,
+                    )
+                  }
+                  onMouseLeave={() => onHoverSource(null)}
+                >
+                  <div className="sub-card-head">
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      style={{ padding: 0, fontWeight: 600 }}
+                      onClick={() =>
+                        onSelectTarget({
+                          layerId: layer.id,
+                          targetDomain: route.targetDomain as Exclude<
+                            typeof route.targetDomain,
+                            'modulation'
+                          >,
+                          targetCardId: route.targetCardId,
+                          targetParamId: route.targetParamId,
+                          label: displayLabel,
+                          min: targetMin,
+                          max: targetMax,
+                        })
+                      }
+                    >
+                      →{' '}
+                      {route.targetCardId === 'secondary-voice'
+                        ? 'Stimme B: '
+                        : isLayerMix
+                          ? 'Layer: '
+                          : ''}
+                      {displayLabel}
+                    </button>
+                    <span className="schema-value">
+                      {SOURCE_LABELS[route.sourceType]} ({Math.round(route.depth * 100)}%)
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -390,7 +410,11 @@ export function ModulationDrawer({
       <div className="sub-card-head">
         <span className="sub-card-title">
           <Waves size={13} color={layer.color} />~ {target.label}
-          {target.targetCardId === 'secondary-voice' ? ' (Stimme B)' : ''}
+          {target.targetCardId === 'secondary-voice'
+            ? ' (Stimme B)'
+            : target.targetCardId === 'layer-mix'
+              ? ' (Layer-Mix)'
+              : ''}
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
@@ -399,7 +423,11 @@ export function ModulationDrawer({
             onClick={() =>
               onAddRoute(layer.id, {
                 label: `${target.label}${
-                  target.targetCardId === 'secondary-voice' ? ' (Stimme B)' : ''
+                  target.targetCardId === 'secondary-voice'
+                    ? ' (Stimme B)'
+                    : target.targetCardId === 'layer-mix'
+                      ? ' (Layer-Mix)'
+                      : ''
                 } Bewegung`,
                 enabled: true,
                 sourceType: 'wave-lfo',

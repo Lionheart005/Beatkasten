@@ -3,6 +3,7 @@ import { wrapPhase01 } from '../math/waves';
 import { ModuleRegistry } from '../registry/ModuleRegistry';
 import {
   buildDefaultParams,
+  LAYER_MIX_PARAMETERS,
   type HarmonyFrame,
   type MutableTimeFrame,
   type ParameterSchema,
@@ -130,6 +131,8 @@ export class LayerEngine {
 
   private readonly gainLSmoother: OnePoleSmoother;
   private readonly gainRSmoother: OnePoleSmoother;
+  private readonly mixBaseParams: Record<string, number> = { level: 0.8, pan: 0 };
+  private readonly mixEffectiveParams: Record<string, number> = { level: 0.8, pan: 0 };
 
   private readonly frameA: MutableTimeFrame = {
     warpedPhase: 0,
@@ -518,6 +521,7 @@ export class LayerEngine {
     const gainRSmoother = this.gainRSmoother;
     const outL = this.bufL;
     const outR = this.bufR;
+    const hasMixMod = audible && router.hasTargetRoutes(cfg, 'voice', 'layer-mix');
 
     for (let offset = 0; offset < count; offset += CONTROL_SUBBLOCK_SIZE) {
       const subLen = Math.min(CONTROL_SUBBLOCK_SIZE, count - offset);
@@ -669,29 +673,50 @@ export class LayerEngine {
       }
 
       // 5. Apply smoothed level & equal-power pan into layer output buffer
-      if (gainLSmoother.current === targetGainL && gainRSmoother.current === targetGainR) {
+      let subTargetGainL = targetGainL;
+      let subTargetGainR = targetGainR;
+      if (hasMixMod) {
+        this.mixBaseParams.level = cfg.level;
+        this.mixBaseParams.pan = cfg.pan;
+        router.applyTargetModulation(
+          cfg,
+          'voice',
+          'layer-mix',
+          undefined,
+          LAYER_MIX_PARAMETERS,
+          this.mixBaseParams,
+          this.mixEffectiveParams,
+        );
+        const modLevel = clamp(this.mixEffectiveParams.level ?? cfg.level, 0, 1.5);
+        const modPan = clamp(this.mixEffectiveParams.pan ?? cfg.pan, -1, 1);
+        const modPanAngle = (modPan + 1) * (HALF_PI * 0.5);
+        subTargetGainL = modLevel * Math.cos(modPanAngle);
+        subTargetGainR = modLevel * Math.sin(modPanAngle);
+      }
+
+      if (gainLSmoother.current === subTargetGainL && gainRSmoother.current === subTargetGainR) {
         for (let i = 0; i < subLen; i++) {
           const l = subL[i]!;
           const r = subR[i]!;
           outL[offset + i] =
-            (l * 0 === 0 && (l > 1e-18 || l < -1e-18) ? l : 0) * targetGainL;
+            (l * 0 === 0 && (l > 1e-18 || l < -1e-18) ? l : 0) * subTargetGainL;
           outR[offset + i] =
-            (r * 0 === 0 && (r > 1e-18 || r < -1e-18) ? r : 0) * targetGainR;
+            (r * 0 === 0 && (r > 1e-18 || r < -1e-18) ? r : 0) * subTargetGainR;
         }
       } else {
         for (let i = 0; i < subLen; i++) {
-          const gL = gainLSmoother.process(targetGainL);
-          const gR = gainRSmoother.process(targetGainR);
+          const gL = gainLSmoother.process(subTargetGainL);
+          const gR = gainRSmoother.process(subTargetGainR);
           const l = subL[i]!;
           const r = subR[i]!;
           outL[offset + i] = (l * 0 === 0 && (l > 1e-18 || l < -1e-18) ? l : 0) * gL;
           outR[offset + i] = (r * 0 === 0 && (r > 1e-18 || r < -1e-18) ? r : 0) * gR;
         }
-        if (Math.abs(gainLSmoother.current - targetGainL) < 1e-6) {
-          gainLSmoother.reset(targetGainL);
+        if (Math.abs(gainLSmoother.current - subTargetGainL) < 1e-6) {
+          gainLSmoother.reset(subTargetGainL);
         }
-        if (Math.abs(gainRSmoother.current - targetGainR) < 1e-6) {
-          gainRSmoother.reset(targetGainR);
+        if (Math.abs(gainRSmoother.current - subTargetGainR) < 1e-6) {
+          gainRSmoother.reset(subTargetGainR);
         }
       }
     }

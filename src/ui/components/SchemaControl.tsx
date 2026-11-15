@@ -80,7 +80,10 @@ export function SchemaControl({
       m.targetDomain === targetDomain &&
       m.targetParamId === schema.id &&
       (m.targetCardId === targetCardId ||
-        (targetDomain === 'voice' && m.targetCardId === 'voice')),
+        (targetDomain === 'voice' &&
+          targetCardId !== 'secondary-voice' &&
+          targetCardId !== 'layer-mix' &&
+          m.targetCardId === 'voice')),
   );
 
   const isTargetOpen =

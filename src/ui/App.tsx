@@ -108,7 +108,10 @@ export function App() {
         <LayerStackPanel
           layers={store.snapshot.layers}
           selectedLayerId={store.selectedLayerId}
+          activeModTarget={store.activeModTarget}
+          hoveredModSourceId={store.hoveredModSourceId}
           onSelectLayer={store.setSelectedLayerId}
+          onOpenModTarget={store.setActiveModTarget}
           onAddLayer={store.addLayer}
           onDuplicateLayer={store.duplicateLayer}
           onDeleteLayer={store.deleteLayer}

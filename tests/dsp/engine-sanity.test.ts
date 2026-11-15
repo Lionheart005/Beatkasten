@@ -983,6 +983,162 @@ describe('DSP Engine Sanity & Contracts', () => {
     expect(pulsedPeakStats.rms).toBeGreaterThan(0.02);
     expect(pulsedTroughStats.rms).toBeLessThan(pulsedPeakStats.rms * 0.35);
   });
+
+  it('modulates layer-mix level with drawn-curve and pan from L to R', () => {
+    const sampleRate = 48000;
+    const base = createDefaultLayer('Mix Mod', 'pipe-organ', 4, 'beats');
+    const droneLayer: LayerConfig = {
+      ...base,
+      level: 0.8,
+      pan: 0,
+      timeOperators: [],
+      voice: {
+        ...base.voice,
+        params: {
+          ...base.voice.params,
+          droneHold: 1,
+        },
+      },
+      processorChain: base.processorChain.map((c) => ({ ...c, bypassed: true })),
+      modulations: [
+        {
+          id: 'r_mix_level',
+          enabled: true,
+          sourceType: 'drawn-curve',
+          sourceConfig: { curveId: 'curve_mix_ramp' },
+          targetDomain: 'voice',
+          targetCardId: 'layer-mix',
+          targetParamId: 'level',
+          combineMode: 'multiply',
+          depth: 1,
+        },
+      ],
+    };
+
+    const levelSnap: BeatSnapshot = {
+      id: 'snap_mix_level',
+      tempoBpm: 120,
+      timeSignature: { numerator: 4, denominator: 4 },
+      masterGain: 1,
+      masterGlue: 0,
+      harmony: {
+        rootNote: 9,
+        scaleId: 'natural_minor',
+        chordPreset: 'minor',
+        progressionId: 'static',
+      },
+      curves: [
+        {
+          id: 'curve_mix_ramp',
+          name: 'Mix Ramp',
+          cycleValue: 1,
+          cycleUnit: 'bars',
+          snapDivision: 0,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.25, y: 0 },
+            { x: 0.5, y: 1 },
+            { x: 0.75, y: 1 },
+            { x: 1, y: 0 },
+          ],
+        },
+      ],
+      layers: [droneLayer],
+    };
+
+    const renderedLevel = renderOfflineLoop(levelSnap, {
+      sampleRate,
+      bars: 1,
+      preRollBars: 0,
+    });
+    const totalSamples = renderedLevel.left.length;
+    const q1End = Math.floor(totalSamples * 0.25);
+    const q3Start = Math.floor(totalSamples * 0.5);
+    const q3End = Math.floor(totalSamples * 0.75);
+
+    const q1Stats = analyzeStereoBuffer(
+      renderedLevel.left.subarray(0, q1End),
+      renderedLevel.right.subarray(0, q1End),
+    );
+    const q3Stats = analyzeStereoBuffer(
+      renderedLevel.left.subarray(q3Start, q3End),
+      renderedLevel.right.subarray(q3Start, q3End),
+    );
+
+    expect(q1Stats.hasNonFinite).toBe(false);
+    expect(q3Stats.hasNonFinite).toBe(false);
+    expect(q3Stats.rms).toBeGreaterThan(0.05);
+    expect(q1Stats.rms).toBeLessThan(q3Stats.rms * 0.25);
+
+    // Pan modulation: drawn-curve 0 -> 1 with add depth=1 from base pan=0 shifts energy from L (-1) to R (+1)
+    const panLayer: LayerConfig = {
+      ...droneLayer,
+      pan: 0,
+      modulations: [
+        {
+          id: 'r_mix_pan',
+          enabled: true,
+          sourceType: 'drawn-curve',
+          sourceConfig: { curveId: 'curve_mix_pan' },
+          targetDomain: 'voice',
+          targetCardId: 'layer-mix',
+          targetParamId: 'pan',
+          combineMode: 'add',
+          depth: 1,
+        },
+      ],
+    };
+
+    const panSnap: BeatSnapshot = {
+      ...levelSnap,
+      id: 'snap_mix_pan',
+      curves: [
+        {
+          id: 'curve_mix_pan',
+          name: 'Pan Sweep',
+          cycleValue: 1,
+          cycleUnit: 'bars',
+          snapDivision: 0,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.15, y: 0 },
+            { x: 0.3, y: 0 },
+            { x: 0.6, y: 1 },
+            { x: 0.85, y: 1 },
+            { x: 1, y: 0 },
+          ],
+        },
+      ],
+      layers: [panLayer],
+    };
+
+    const renderedPan = renderOfflineLoop(panSnap, {
+      sampleRate,
+      bars: 1,
+      preRollBars: 0,
+    });
+
+    const rmsMono = (buf: Float32Array) => {
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i]! * buf[i]!;
+      return Math.sqrt(sum / Math.max(1, buf.length));
+    };
+
+    const panLeftStart = Math.floor(totalSamples * 0.05);
+    const panLeftEnd = Math.floor(totalSamples * 0.25);
+    const panRightStart = Math.floor(totalSamples * 0.65);
+    const panRightEnd = Math.floor(totalSamples * 0.8);
+
+    const leftAtStart = rmsMono(renderedPan.left.subarray(panLeftStart, panLeftEnd));
+    const rightAtStart = rmsMono(renderedPan.right.subarray(panLeftStart, panLeftEnd));
+    const leftAtRight = rmsMono(renderedPan.left.subarray(panRightStart, panRightEnd));
+    const rightAtRight = rmsMono(renderedPan.right.subarray(panRightStart, panRightEnd));
+
+    expect(leftAtStart).toBeGreaterThan(0.05);
+    expect(rightAtStart).toBeLessThan(leftAtStart * 0.7);
+    expect(rightAtRight).toBeGreaterThan(0.05);
+    expect(leftAtRight).toBeLessThan(rightAtRight * 0.7);
+  });
 });
 
 function defaultVoiceParamsForTest(moduleId: string): Record<string, number> {

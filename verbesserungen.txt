@@ -1,0 +1,9 @@
+layer als gruppe organisierbar machen und verschieben für übersicht.
+
+wenn man in säule 2 regler verschieben will, dann schiebt sich die ganze kachel weg, das ausstellen, die pfeile reichen zum sortieren.
+
+appegio tempo noch viel schneller möglich machen
+
+die glocken klingen irgenwie komplett verzerrt und unschön und buggen komplett, wenn man sie hinzufügt, dann kann man sie nicht mehr entfernen, sie sind an random andere layer gebunden und gleichzeitig mit ihnen ausgewählt oder andere dinge.
+
+export loop muss auch länger als die paar takte sein. 
