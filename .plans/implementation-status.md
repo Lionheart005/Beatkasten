@@ -45,6 +45,10 @@
 - [x] **WP-11 (`gemini-4-hydrogen-high`)**: Obere `Wellenfunktion`-Anzeige & `Four-on-the-Floor`-Presets (`src/ui/components/TimePreviewCanvas.tsx`, `src/ui/App.tsx`, `src/ui/panels/LayerInspector.tsx`):
   - `WaveformScopeCanvas` im oberen `visual-center` durch hochauflösendes (`256`-Sample + `ResizeObserver`) `TimePreviewCanvas` für den jeweils ausgewählten Layer ersetzt (`Wellenfunktion · <Layer>` bleibt beim Scrollen in Säule 1 stets sichtbar); doppelte kleine Vorschau aus Säule 1 entfernt und `applyRhythmPreset` für `Four-on-the-Floor` & Co. bereinigt.
 
+### Welle 5: Laptop-Performance & Zero-Re-Render-UI ([`05-performance-optimization.md`](./05-performance-optimization.md))
+- [x] **WP-12 (`gemini-4-hydrogen-high`)**: Zero-Alloc AudioWorklet-Telemetrie & Entfernung des ungenutzten Scope-Ringpuffers (`TechnoEngine.ts`, `WorkletProcessor.ts` mit `TELEMETRY_INTERVAL_BLOCKS = 10` & Scratch-Arrays, `AudioBridge.ts`).
+- [x] **WP-13 (`gemini-4-hydrogen-high`)**: Entkopplung der Live-Telemetrie vom React-Root-State (`useStudioStore.ts`, `App.tsx`, `TransportBar.tsx` mit `meterFillRef`, `PhaseRadarCanvas.tsx` via `rAF` + DOM-Ref) + Offscreen-Kurven-Cache (`bgCanvasRef`) im `TimePreviewCanvas.tsx` + Entfernung von `WaveformScopeCanvas.tsx`.
+
 ## 4. Gefundene Fehler, Probleme & Wichtige Erkenntnisse
 - **Ursache für unregelmäßigen `Four-on-the-Floor` (gelöst in WP-10/WP-11)**: `interferenceEnergy` verwendete vorher `Math.sin` (startete auf der Zählzeit bei `0.5` unipolar statt auf dem Gipfel `1.0`), `time-pulse-interference` feuerte teils doppelt (`crossedThreshold` + `steppedInEnergy`) und `Four-on-the-Floor` mischte `freqB = 1` (`0.2`) + `threshold = 0.52` + `gravity = 0.9` ein. Durch Cosinus-Ausrichtung, analytische Wellenkamm-Erkennung (`pulseSlope`), `0`-Defaults und sauberes Preset läuft `Four-on-the-Floor` jetzt exakt auf Beat 1, 2, 3, 4.
 - **Umgebungs-Check (15.11.2026)**: `node` v26.9.0 & `npm` 12.2.0 installiert; `git` mit Initial-Commit (`048322d`) eingerichtet.

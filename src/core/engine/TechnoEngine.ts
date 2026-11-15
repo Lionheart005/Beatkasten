@@ -15,14 +15,11 @@ import { LayerEngine } from './LayerEngine';
 import { MasterClock } from './MasterClock';
 
 const DEFAULT_MAX_BLOCK_SIZE = 4096;
-const SCOPE_BUFFER_SIZE = 512;
 const CROSSFADE_SECONDS = 0.015; // ~15 ms click-free snapshot/section transition
 
 export interface EngineTelemetry {
   layerPhases: Float32Array;
   layerEnergies: Float32Array;
-  scopeL: Float32Array;
-  scopeR: Float32Array;
   combinedCycleBeats: number;
   currentBeat: number;
   currentBar: number;
@@ -91,8 +88,6 @@ export class TechnoEngine {
     this.telemetry = {
       layerPhases: new Float32Array(0),
       layerEnergies: new Float32Array(0),
-      scopeL: new Float32Array(SCOPE_BUFFER_SIZE),
-      scopeR: new Float32Array(SCOPE_BUFFER_SIZE),
       combinedCycleBeats: 4,
       currentBeat: 0,
       currentBar: 0,
@@ -141,7 +136,7 @@ export class TechnoEngine {
   }
 
   /**
-   * Resets all DSP states, clock position, telemetry scopes, and crossfade state.
+   * Resets all DSP states, clock position, telemetry, and crossfade state.
    */
   public reset(): void {
     this.clock.reset();
@@ -161,8 +156,6 @@ export class TechnoEngine {
     this.lastOutR = 0;
     this.telemetry.layerPhases.fill(0);
     this.telemetry.layerEnergies.fill(0);
-    this.telemetry.scopeL.fill(0);
-    this.telemetry.scopeR.fill(0);
     this.telemetry.currentBeat = 0;
     this.telemetry.currentBar = 0;
   }
@@ -381,34 +374,9 @@ export class TechnoEngine {
     this.lastOutL = outL[outOffset + count - 1] ?? 0;
     this.lastOutR = outR[outOffset + count - 1] ?? 0;
 
-    this.updateScope(outL, outR, outOffset, count);
-
     this.clock.advance(count);
     this.telemetry.currentBeat = this.clock.beatPosition;
     this.telemetry.currentBar = this.clock.barPosition;
-  }
-
-  private updateScope(
-    outL: Float32Array,
-    outR: Float32Array,
-    offset: number,
-    count: number,
-  ): void {
-    const scopeL = this.telemetry.scopeL;
-    const scopeR = this.telemetry.scopeR;
-    const take = Math.min(count, SCOPE_BUFFER_SIZE);
-    const shift = SCOPE_BUFFER_SIZE - take;
-
-    if (shift > 0) {
-      scopeL.copyWithin(0, take);
-      scopeR.copyWithin(0, take);
-    }
-
-    const srcStart = offset + count - take;
-    for (let i = 0; i < take; i++) {
-      scopeL[shift + i] = outL[srcStart + i]!;
-      scopeR[shift + i] = outR[srcStart + i]!;
-    }
   }
 
   private rebuildHarmonyCache(

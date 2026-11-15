@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   Download,
   FolderCheck,
@@ -7,6 +8,7 @@ import {
   RotateCcw,
   Square,
 } from 'lucide-react';
+import type { LiveTelemetry } from '../../audio-host';
 import { CHORD_PRESETS, PROGRESSION_PRESETS } from '../../core/theory/harmony';
 import { NOTE_NAMES, SCALE_DEFINITIONS } from '../../core/theory/scales';
 import type { BeatSnapshot } from '../../core/state/types';
@@ -15,7 +17,8 @@ interface TransportBarProps {
   projectName: string;
   snapshot: BeatSnapshot;
   isPlaying: boolean;
-  peakLevel: number;
+  subscribeTelemetry: (cb: (t: LiveTelemetry) => void) => () => void;
+  getTelemetry: () => LiveTelemetry;
   fsConnected: boolean;
   fsFolderName: string | null;
   onTogglePlay: () => void;
@@ -47,7 +50,8 @@ export function TransportBar({
   projectName,
   snapshot,
   isPlaying,
-  peakLevel,
+  subscribeTelemetry,
+  getTelemetry,
   fsConnected,
   fsFolderName,
   onTogglePlay,
@@ -60,6 +64,22 @@ export function TransportBar({
   onOpenExportModal,
 }: TransportBarProps) {
   const sigValue = `${snapshot.timeSignature.numerator}/${snapshot.timeSignature.denominator}`;
+  const meterFillRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const updateMeter = (t: LiveTelemetry) => {
+      const el = meterFillRef.current;
+      if (!el) return;
+      const pct =
+        isPlaying && t.isPlaying
+          ? Math.min(100, Math.max(0, t.peakLevel * 100))
+          : 0;
+      el.style.width = `${pct}%`;
+    };
+
+    updateMeter(getTelemetry());
+    return subscribeTelemetry(updateMeter);
+  }, [getTelemetry, isPlaying, subscribeTelemetry]);
 
   return (
     <header className="transport-bar">
@@ -273,8 +293,9 @@ export function TransportBar({
           />
           <div className="peak-meter-track" title="Ausgangspegel">
             <div
+              ref={meterFillRef}
               className="peak-meter-fill"
-              style={{ width: `${Math.min(100, peakLevel * 100)}%` }}
+              style={{ width: '0%' }}
             />
           </div>
         </div>

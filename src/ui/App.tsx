@@ -51,10 +51,6 @@ export function App() {
   const selectedLayerIndex = store.snapshot.layers.findIndex(
     (l) => l.id === store.selectedLayerId,
   );
-  const currentLayerPhase =
-    selectedLayerIndex >= 0
-      ? (store.telemetry.layerPhases[selectedLayerIndex] ?? 0)
-      : 0;
 
   return (
     <div className="studio-shell">
@@ -62,7 +58,8 @@ export function App() {
         projectName={store.project.name}
         snapshot={store.snapshot}
         isPlaying={store.isPlaying}
-        peakLevel={store.telemetry.peakLevel}
+        subscribeTelemetry={store.subscribeTelemetry}
+        getTelemetry={store.getTelemetry}
         fsConnected={store.fsConnected}
         fsFolderName={store.fsFolderName}
         onTogglePlay={() => void store.togglePlay()}
@@ -81,7 +78,8 @@ export function App() {
           layers={store.snapshot.layers}
           beatsPerBar={store.snapshot.timeSignature.numerator}
           selectedLayerId={store.selectedLayerId}
-          telemetry={store.telemetry}
+          subscribeTelemetry={store.subscribeTelemetry}
+          getTelemetry={store.getTelemetry}
           isPlaying={store.isPlaying}
           onSelectLayer={store.setSelectedLayerId}
         />
@@ -90,11 +88,12 @@ export function App() {
             <TimePreviewCanvas
               layer={store.selectedLayer}
               beatsPerBar={store.snapshot.timeSignature.numerator}
-              currentPhase={currentLayerPhase}
+              layerIndex={selectedLayerIndex >= 0 ? selectedLayerIndex : 0}
               height={84}
               showHeader
               isPlaying={store.isPlaying}
-              peakLevel={store.telemetry.peakLevel}
+              subscribeTelemetry={store.subscribeTelemetry}
+              getTelemetry={store.getTelemetry}
             />
           ) : (
             <div className="muted-note">

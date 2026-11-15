@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { LiveTelemetry } from '../../audio-host';
 import { defaultRegistry } from '../../core/defaultRegistry';
 import type { TimeFrame } from '../../core/registry/types';
 import type { LayerConfig } from '../../core/state/types';
@@ -9,11 +10,12 @@ type PreviewTimeFrame = TimeFrame & { readonly pulseSlope?: number };
 interface TimePreviewCanvasProps {
   layer: LayerConfig;
   beatsPerBar: number;
-  currentPhase?: number;
+  layerIndex?: number;
   height?: number;
   showHeader?: boolean;
   isPlaying?: boolean;
-  peakLevel?: number;
+  subscribeTelemetry?: (cb: (t: LiveTelemetry) => void) => () => void;
+  getTelemetry?: () => LiveTelemetry;
 }
 
 function formatCycleReadout(cycleBeats: number, beatsPerBar: number): string {
@@ -32,13 +34,23 @@ function formatCycleReadout(cycleBeats: number, beatsPerBar: number): string {
 export function TimePreviewCanvas({
   layer,
   beatsPerBar,
-  currentPhase = 0,
+  layerIndex = 0,
   height = 84,
   showHeader = false,
   isPlaying = false,
-  peakLevel = 0,
+  subscribeTelemetry,
+  getTelemetry,
 }: TimePreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const statusTextRef = useRef<HTMLSpanElement | null>(null);
+  const telemetryRef = useRef<LiveTelemetry | null>(
+    getTelemetry ? getTelemetry() : null,
+  );
+  const rafIdRef = useRef<number | null>(null);
+  const logicalSizeRef = useRef<{ width: number; height: number; dpr: number }>(
+    { width: 260, height, dpr: 1 },
+  );
   const [canvasWidth, setCanvasWidth] = useState(0);
 
   const cycleBeats = cycleToBeats(
@@ -61,21 +73,75 @@ export function TimePreviewCanvas({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  const drawForeground = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const { width, height: logicalHeight, dpr } = logicalSizeRef.current;
+    const telemetry = telemetryRef.current;
+    const rawPhase = telemetry ? (telemetry.layerPhases[layerIndex] ?? 0) : 0;
+    const clampedPhase = Math.max(0, Math.min(1, rawPhase));
+    const px = clampedPhase * width;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const bgCanvas = bgCanvasRef.current;
+    if (bgCanvas && bgCanvas.width > 0 && bgCanvas.height > 0) {
+      ctx.drawImage(bgCanvas, 0, 0, canvas.width, canvas.height);
+    }
+
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, logicalHeight);
+    ctx.stroke();
+    ctx.restore();
+
+    const statusEl = statusTextRef.current;
+    if (statusEl) {
+      if (isPlaying) {
+        const peakPct = ((telemetry?.peakLevel ?? 0) * 100).toFixed(0);
+        statusEl.textContent = `Pegel ${peakPct} % · Playhead aktiv`;
+      } else {
+        statusEl.textContent = 'Bereit — Play drücken';
+      }
+    }
+  }, [isPlaying, layerIndex]);
+
+  // Rebuild offscreen static waveform cache ONLY when curve/grid/size changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
     const dpr = window.devicePixelRatio || 1;
     const width = canvas.clientWidth || canvasWidth || 260;
-    if (
-      canvas.width !== Math.round(width * dpr) ||
-      canvas.height !== Math.round(height * dpr)
-    ) {
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
+    const pixelWidth = Math.round(width * dpr);
+    const pixelHeight = Math.round(height * dpr);
+
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
     }
+
+    if (!bgCanvasRef.current) {
+      bgCanvasRef.current = document.createElement('canvas');
+    }
+    const bgCanvas = bgCanvasRef.current;
+    if (bgCanvas.width !== pixelWidth || bgCanvas.height !== pixelHeight) {
+      bgCanvas.width = pixelWidth;
+      bgCanvas.height = pixelHeight;
+    }
+
+    logicalSizeRef.current = { width, height, dpr };
+
+    const bgCtx = bgCanvas.getContext('2d');
+    if (!bgCtx) return;
 
     const samples = 256;
     const energies = new Float32Array(samples);
@@ -123,81 +189,103 @@ export function TimePreviewCanvas({
       prevFrame = frame;
     }
 
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, width, height);
+    bgCtx.save();
+    bgCtx.setTransform(1, 0, 0, 1, 0, 0);
+    bgCtx.clearRect(0, 0, pixelWidth, pixelHeight);
+    bgCtx.scale(dpr, dpr);
 
     // Beat grid lines
     const gridCount = Math.max(1, Math.min(16, Math.round(cycleBeats)));
-    ctx.strokeStyle = 'rgba(161, 174, 198, 0.14)';
-    ctx.lineWidth = 1;
+    bgCtx.strokeStyle = 'rgba(161, 174, 198, 0.14)';
+    bgCtx.lineWidth = 1;
     for (let g = 1; g < gridCount; g++) {
       const gx = (g / gridCount) * width;
-      ctx.beginPath();
-      ctx.moveTo(gx, 0);
-      ctx.lineTo(gx, height);
-      ctx.stroke();
+      bgCtx.beginPath();
+      bgCtx.moveTo(gx, 0);
+      bgCtx.lineTo(gx, height);
+      bgCtx.stroke();
     }
 
     // Filled pulse energy curve
-    ctx.beginPath();
-    ctx.moveTo(0, height - 4);
+    bgCtx.beginPath();
+    bgCtx.moveTo(0, height - 4);
     for (let i = 0; i < samples; i++) {
       const x = (i / (samples - 1)) * width;
       const y = height - 4 - (energies[i] ?? 0) * (height - 12);
-      ctx.lineTo(x, y);
+      bgCtx.lineTo(x, y);
     }
-    ctx.lineTo(width, height - 4);
-    ctx.closePath();
-    ctx.fillStyle = `${layer.color}2e`;
-    ctx.fill();
+    bgCtx.lineTo(width, height - 4);
+    bgCtx.closePath();
+    bgCtx.fillStyle = `${layer.color}2e`;
+    bgCtx.fill();
 
     // Stroke curve
-    ctx.beginPath();
+    bgCtx.beginPath();
     for (let i = 0; i < samples; i++) {
       const x = (i / (samples - 1)) * width;
       const y = height - 4 - (energies[i] ?? 0) * (height - 12);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      if (i === 0) bgCtx.moveTo(x, y);
+      else bgCtx.lineTo(x, y);
     }
-    ctx.strokeStyle = layer.color;
-    ctx.lineWidth = 1.8;
-    ctx.stroke();
+    bgCtx.strokeStyle = layer.color;
+    bgCtx.lineWidth = 1.8;
+    bgCtx.stroke();
 
     // Trigger spikes
-    ctx.strokeStyle = '#eef2f9';
-    ctx.lineWidth = 1.4;
+    bgCtx.strokeStyle = '#eef2f9';
+    bgCtx.lineWidth = 1.4;
     for (let i = 0; i < samples; i++) {
       const t = triggers[i] ?? 0;
       if (t > 0.05) {
         const x = Math.max(1, Math.min(width - 1, (i / (samples - 1)) * width));
         const yTop = height - 4 - t * (height - 10);
-        ctx.beginPath();
-        ctx.moveTo(x, height - 4);
-        ctx.lineTo(x, yTop);
-        ctx.stroke();
+        bgCtx.beginPath();
+        bgCtx.moveTo(x, height - 4);
+        bgCtx.lineTo(x, yTop);
+        bgCtx.stroke();
       }
     }
 
-    // Live playhead cursor
-    const px = Math.max(0, Math.min(1, currentPhase)) * width;
-    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(px, 0);
-    ctx.lineTo(px, height);
-    ctx.stroke();
+    bgCtx.restore();
 
-    ctx.restore();
+    telemetryRef.current = getTelemetry ? getTelemetry() : telemetryRef.current;
+    drawForeground();
   }, [
     beatsPerBar,
     canvasWidth,
-    currentPhase,
     cycleBeats,
+    drawForeground,
+    getTelemetry,
     height,
     layer.color,
+    layer.cycleLength,
     layer.timeOperators,
   ]);
+
+  // Subscribe to live telemetry for rAF-throttled playhead & status text updates
+  useEffect(() => {
+    telemetryRef.current = getTelemetry ? getTelemetry() : null;
+    drawForeground();
+
+    if (!subscribeTelemetry) return;
+
+    const unsubscribe = subscribeTelemetry((nextTelemetry) => {
+      telemetryRef.current = nextTelemetry;
+      if (rafIdRef.current !== null) return;
+      rafIdRef.current = window.requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        drawForeground();
+      });
+    });
+
+    return () => {
+      unsubscribe();
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [drawForeground, getTelemetry, subscribeTelemetry]);
 
   const canvasElement = (
     <canvas
@@ -247,11 +335,10 @@ export function TimePreviewCanvas({
             · {formatCycleReadout(cycleBeats, beatsPerBar)}
           </span>
         </span>
-        <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {isPlaying
-            ? `Pegel ${(peakLevel * 100).toFixed(0)} % · Playhead aktiv`
-            : 'Bereit — Play drücken'}
-        </span>
+        <span
+          ref={statusTextRef}
+          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+        />
       </div>
       {canvasElement}
     </div>

@@ -7,7 +7,6 @@ import {
 } from './WorkletProcessor';
 import workletUrl from './WorkletProcessor.ts?worker&url';
 
-const SCOPE_SIZE = 512;
 const SNAPSHOT_THROTTLE_MS = 16;
 
 export interface LiveTelemetry {
@@ -17,8 +16,6 @@ export interface LiveTelemetry {
   readonly combinedCycleBeats: number;
   readonly layerPhases: readonly number[];
   readonly layerEnergies: readonly number[];
-  readonly scopeL: Float32Array;
-  readonly scopeR: Float32Array;
   readonly peakLevel: number;
 }
 
@@ -35,8 +32,6 @@ function createInitialTelemetry(): LiveTelemetry {
     combinedCycleBeats: 4,
     layerPhases: [],
     layerEnergies: [],
-    scopeL: new Float32Array(SCOPE_SIZE),
-    scopeR: new Float32Array(SCOPE_SIZE),
     peakLevel: 0,
   };
 }
@@ -130,15 +125,6 @@ export class AudioBridge {
     if (!msg || typeof msg !== 'object') return;
 
     if (msg.type === 'telemetry') {
-      const scopeL =
-        msg.scopeL.length === this.telemetry.scopeL.length
-          ? new Float32Array(msg.scopeL)
-          : new Float32Array(msg.scopeL);
-      const scopeR =
-        msg.scopeR.length === this.telemetry.scopeR.length
-          ? new Float32Array(msg.scopeR)
-          : new Float32Array(msg.scopeR);
-
       this.telemetry = {
         isPlaying: this.isPlaying,
         currentBeat: msg.currentBeat,
@@ -146,8 +132,6 @@ export class AudioBridge {
         combinedCycleBeats: msg.combinedCycleBeats,
         layerPhases: msg.layerPhases,
         layerEnergies: msg.layerEnergies,
-        scopeL,
-        scopeR,
         peakLevel: this.isPlaying ? msg.peakLevel : 0,
       };
       this.notifyListeners();

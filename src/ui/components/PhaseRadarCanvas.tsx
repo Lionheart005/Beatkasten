@@ -7,7 +7,8 @@ interface PhaseRadarCanvasProps {
   layers: readonly LayerConfig[];
   beatsPerBar: number;
   selectedLayerId: string;
-  telemetry: LiveTelemetry;
+  subscribeTelemetry: (cb: (t: LiveTelemetry) => void) => () => void;
+  getTelemetry: () => LiveTelemetry;
   isPlaying: boolean;
   onSelectLayer: (layerId: string) => void;
 }
@@ -16,11 +17,15 @@ export function PhaseRadarCanvas({
   layers,
   beatsPerBar,
   selectedLayerId,
-  telemetry,
+  subscribeTelemetry,
+  getTelemetry,
   isPlaying,
   onSelectLayer,
 }: PhaseRadarCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const beatLabelRef = useRef<HTMLDivElement | null>(null);
+  const telemetryRef = useRef<LiveTelemetry>(getTelemetry());
+  const rafIdRef = useRef<number | null>(null);
 
   const combinedBeats = useMemo(() => {
     const activeLayers = layers.filter((l) => l.enabled && !l.muted);
@@ -60,95 +65,134 @@ export function PhaseRadarCanvas({
   const combinedBars = combinedBeats / Math.max(1, beatsPerBar);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const draw = () => {
+      const telemetry = telemetryRef.current;
 
-    const dpr = window.devicePixelRatio || 1;
-    const size = 112;
-    if (canvas.width !== size * dpr || canvas.height !== size * dpr) {
-      canvas.width = size * dpr;
-      canvas.height = size * dpr;
-    }
+      const labelEl = beatLabelRef.current;
+      if (labelEl) {
+        const safeBeatsPerBar = Math.max(1, beatsPerBar);
+        const barNum = Math.floor(telemetry.currentBar) + 1;
+        const beatNum = ((telemetry.currentBeat % safeBeatsPerBar) + 1).toFixed(1);
+        labelEl.textContent = `Phasen-Radar · Takt ${barNum} · Beat ${beatNum}`;
+      }
 
-    ctx.save();
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, size, size);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    const cx = size / 2;
-    const cy = size / 2;
-    const maxR = size / 2 - 8;
-    const minR = 14;
+      const dpr = window.devicePixelRatio || 1;
+      const size = 112;
+      if (canvas.width !== size * dpr || canvas.height !== size * dpr) {
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+      }
 
-    // Radar crosshair & subtle beat grid
-    ctx.strokeStyle = 'rgba(161, 174, 198, 0.14)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx, 6);
-    ctx.lineTo(cx, size - 6);
-    ctx.moveTo(6, cy);
-    ctx.lineTo(size - 6, cy);
-    ctx.stroke();
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, size, size);
 
-    const count = Math.max(1, layers.length);
-    const stepR = count > 1 ? (maxR - minR) / (count - 1) : 0;
+      const cx = size / 2;
+      const cy = size / 2;
+      const maxR = size / 2 - 8;
+      const minR = 14;
 
-    layers.forEach((layer, idx) => {
-      const r = count === 1 ? maxR * 0.72 : minR + idx * stepR;
-      const phase = telemetry.layerPhases[idx] ?? 0;
-      const energy = telemetry.layerEnergies[idx] ?? 0;
-      const isSelected = layer.id === selectedLayerId;
-      const isMuted = layer.muted || !layer.enabled;
-
-      // Base ring
+      // Radar crosshair & subtle beat grid
+      ctx.strokeStyle = 'rgba(161, 174, 198, 0.14)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = layer.color;
-      ctx.globalAlpha = isMuted ? 0.18 : isSelected ? 0.85 : 0.45;
-      ctx.lineWidth = isSelected ? 2.5 : 1.6;
+      ctx.moveTo(cx, 6);
+      ctx.lineTo(cx, size - 6);
+      ctx.moveTo(6, cy);
+      ctx.lineTo(size - 6, cy);
       ctx.stroke();
 
-      // Active pulse glow arc
-      if (!isMuted && energy > 0.04) {
+      const count = Math.max(1, layers.length);
+      const stepR = count > 1 ? (maxR - minR) / (count - 1) : 0;
+
+      layers.forEach((layer, idx) => {
+        const r = count === 1 ? maxR * 0.72 : minR + idx * stepR;
+        const phase = telemetry.layerPhases[idx] ?? 0;
+        const energy = telemetry.layerEnergies[idx] ?? 0;
+        const isSelected = layer.id === selectedLayerId;
+        const isMuted = layer.muted || !layer.enabled;
+
+        // Base ring
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.strokeStyle = layer.color;
-        ctx.globalAlpha = Math.min(0.85, energy * 0.75);
-        ctx.lineWidth = 2 + energy * 4.5;
+        ctx.globalAlpha = isMuted ? 0.18 : isSelected ? 0.85 : 0.45;
+        ctx.lineWidth = isSelected ? 2.5 : 1.6;
         ctx.stroke();
-      }
 
-      // Phase marker dot on ring
-      const angle = phase * Math.PI * 2 - Math.PI / 2;
-      const dotX = cx + Math.cos(angle) * r;
-      const dotY = cy + Math.sin(angle) * r;
+        // Active pulse glow arc
+        if (!isMuted && energy > 0.04) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = layer.color;
+          ctx.globalAlpha = Math.min(0.85, energy * 0.75);
+          ctx.lineWidth = 2 + energy * 4.5;
+          ctx.stroke();
+        }
 
-      ctx.globalAlpha = isMuted ? 0.3 : 1;
+        // Phase marker dot on ring
+        const angle = phase * Math.PI * 2 - Math.PI / 2;
+        const dotX = cx + Math.cos(angle) * r;
+        const dotY = cy + Math.sin(angle) * r;
+
+        ctx.globalAlpha = isMuted ? 0.3 : 1;
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, isSelected ? 4 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = layer.color;
+        ctx.fill();
+
+        if (!isMuted && isPlaying && energy > 0.18) {
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 4 + energy * 5, 0, Math.PI * 2);
+          ctx.strokeStyle = layer.color;
+          ctx.globalAlpha = 0.45 * energy;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      });
+
+      // Center hub showing beat pulse
+      ctx.globalAlpha = 0.9;
       ctx.beginPath();
-      ctx.arc(dotX, dotY, isSelected ? 4 : 3, 0, Math.PI * 2);
-      ctx.fillStyle = layer.color;
+      ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+      ctx.fillStyle = isPlaying ? '#38bdf8' : '#6c7993';
       ctx.fill();
 
-      if (!isMuted && isPlaying && energy > 0.18) {
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 4 + energy * 5, 0, Math.PI * 2);
-        ctx.strokeStyle = layer.color;
-        ctx.globalAlpha = 0.45 * energy;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
+      ctx.restore();
+    };
+
+    telemetryRef.current = getTelemetry();
+    draw();
+
+    const unsubscribe = subscribeTelemetry((nextTelemetry) => {
+      telemetryRef.current = nextTelemetry;
+      if (rafIdRef.current !== null) return;
+      rafIdRef.current = window.requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        draw();
+      });
     });
 
-    // Center hub showing beat pulse
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fillStyle = isPlaying ? '#38bdf8' : '#6c7993';
-    ctx.fill();
-
-    ctx.restore();
-  }, [isPlaying, layers, selectedLayerId, telemetry]);
+    return () => {
+      unsubscribe();
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [
+    beatsPerBar,
+    getTelemetry,
+    isPlaying,
+    layers,
+    selectedLayerId,
+    subscribeTelemetry,
+  ]);
 
   return (
     <div className="visual-card">
@@ -158,10 +202,7 @@ export function PhaseRadarCanvas({
         title="Phasen-Radar: Zeigt die aktuellen Umlauf-Phasen aller Layer"
       />
       <div className="radar-meta">
-        <div className="radar-title">
-          Phasen-Radar · Takt {Math.floor(telemetry.currentBar) + 1} · Beat{' '}
-          {((telemetry.currentBeat % beatsPerBar) + 1).toFixed(1)}
-        </div>
+        <div ref={beatLabelRef} className="radar-title" />
         <div className="radar-riddle-box">
           Wiederholungs-Rätsel schließt alle{' '}
           <strong>

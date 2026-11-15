@@ -42,18 +42,6 @@ export interface ActiveModTarget {
 
 export type SectionSwitchMode = 'immediate' | 'next-bar';
 
-const INITIAL_TELEMETRY: LiveTelemetry = {
-  isPlaying: false,
-  currentBeat: 0,
-  currentBar: 0,
-  combinedCycleBeats: 4,
-  layerPhases: [],
-  layerEnergies: [],
-  scopeL: new Float32Array(128),
-  scopeR: new Float32Array(128),
-  peakLevel: 0,
-};
-
 let uiIdCounter = 0;
 function nextUiId(prefix: string): string {
   uiIdCounter += 1;
@@ -96,7 +84,6 @@ export function useStudioStore() {
   const [sectionSwitchMode, setSectionSwitchMode] =
     useState<SectionSwitchMode>('next-bar');
   const [pendingSectionId, setPendingSectionId] = useState<string | null>(null);
-  const [telemetry, setTelemetry] = useState<LiveTelemetry>(INITIAL_TELEMETRY);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [fsConnected, setFsConnected] = useState<boolean>(false);
   const [fsFolderName, setFsFolderName] = useState<string | null>(null);
@@ -181,11 +168,12 @@ export function useStudioStore() {
     };
   }, []);
 
-  // Subscribe to live audio telemetry
+  // Subscribe to live audio telemetry (only update React state on play/stop transitions)
   useEffect(() => {
     const unsubscribe = audioBridgeSingleton.onTelemetry((nextTelemetry) => {
-      setTelemetry(nextTelemetry);
-      setIsPlaying(nextTelemetry.isPlaying);
+      setIsPlaying((prev) =>
+        prev === nextTelemetry.isPlaying ? prev : nextTelemetry.isPlaying,
+      );
     });
     return () => {
       unsubscribe();
@@ -197,6 +185,17 @@ export function useStudioStore() {
       }
     };
   }, []);
+
+  const subscribeTelemetry = useCallback(
+    (listener: (t: LiveTelemetry) => void) =>
+      audioBridgeSingleton.onTelemetry(listener),
+    [],
+  );
+
+  const getTelemetry = useCallback(
+    () => audioBridgeSingleton.getTelemetry(),
+    [],
+  );
 
   // Ensure selectedLayerId always points to an existing layer
   useEffect(() => {
@@ -1139,7 +1138,8 @@ export function useStudioStore() {
     sectionSwitchMode,
     setSectionSwitchMode,
     pendingSectionId,
-    telemetry,
+    subscribeTelemetry,
+    getTelemetry,
     isPlaying,
     fsConnected,
     fsFolderName,

@@ -19,7 +19,7 @@ declare function registerProcessor(
 declare const sampleRate: number;
 
 export const TECHNO_WORKLET_PROCESSOR_NAME = 'techno-wave-processor';
-const TELEMETRY_INTERVAL_BLOCKS = 6; // ~62.5 Hz at 48 kHz / 128-sample quantum
+const TELEMETRY_INTERVAL_BLOCKS = 10; // ~37.5 Hz at 48 kHz / 128-sample quantum
 const DEFAULT_QUANTUM_SIZE = 128;
 
 export type WorkletInboundMessage =
@@ -37,8 +37,6 @@ export type WorkletOutboundMessage =
       readonly combinedCycleBeats: number;
       readonly layerPhases: number[];
       readonly layerEnergies: number[];
-      readonly scopeL: number[];
-      readonly scopeR: number[];
       readonly peakLevel: number;
     }
   | { readonly type: 'section-switched'; readonly snapshotId: string };
@@ -55,6 +53,8 @@ if (
     private pendingSnapshot: BeatSnapshot | null = null;
     private blockCounter = 0;
     private heldPeakLevel = 0;
+    private phaseScratch: number[] = [];
+    private energyScratch: number[] = [];
 
     constructor(options?: AudioWorkletNodeOptions) {
       super(options);
@@ -105,15 +105,30 @@ if (
 
     private emitTelemetry(peakLevel: number): void {
       const t = this.engine.getTelemetry();
+      const phaseCount = t.layerPhases.length;
+      const energyCount = t.layerEnergies.length;
+
+      if (this.phaseScratch.length !== phaseCount) {
+        this.phaseScratch.length = phaseCount;
+      }
+      if (this.energyScratch.length !== energyCount) {
+        this.energyScratch.length = energyCount;
+      }
+
+      for (let i = 0; i < phaseCount; i++) {
+        this.phaseScratch[i] = t.layerPhases[i]!;
+      }
+      for (let i = 0; i < energyCount; i++) {
+        this.energyScratch[i] = t.layerEnergies[i]!;
+      }
+
       const message: WorkletOutboundMessage = {
         type: 'telemetry',
         currentBeat: t.currentBeat,
         currentBar: t.currentBar,
         combinedCycleBeats: t.combinedCycleBeats,
-        layerPhases: Array.from(t.layerPhases),
-        layerEnergies: Array.from(t.layerEnergies),
-        scopeL: Array.from(t.scopeL),
-        scopeR: Array.from(t.scopeR),
+        layerPhases: this.phaseScratch,
+        layerEnergies: this.energyScratch,
         peakLevel,
       };
       this.port.postMessage(message);
