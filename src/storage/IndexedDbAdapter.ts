@@ -7,10 +7,11 @@ import {
 } from './ProjectStorageAdapter';
 
 const DB_NAME = 'techno-sound-generator-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_PROJECTS = 'projects';
 const STORE_EXPORTS = 'exports';
 const STORE_CURVES = 'curves';
+const STORE_SETTINGS = 'settings';
 
 interface ExportRecord {
   readonly key: string;
@@ -47,6 +48,9 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_CURVES)) {
         db.createObjectStore(STORE_CURVES, { keyPath: 'key' });
       }
+      if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
+        db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
@@ -82,6 +86,28 @@ export class IndexedDbAdapter implements ProjectStorageAdapter {
 
   isSupported(): boolean {
     return typeof indexedDB !== 'undefined';
+  }
+
+  /** Stores a small structured-cloneable value (e.g. the project folder handle). */
+  async saveSetting(key: string, value: unknown): Promise<void> {
+    await runTransaction(STORE_SETTINGS, 'readwrite', (store) => store.put({ key, value }));
+  }
+
+  async loadSetting<T>(key: string): Promise<T | null> {
+    try {
+      const record = await runTransaction<{ key: string; value: T } | undefined>(
+        STORE_SETTINGS,
+        'readonly',
+        (store) => store.get(key) as IDBRequest<{ key: string; value: T } | undefined>,
+      );
+      return record ? record.value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteSetting(key: string): Promise<void> {
+    await runTransaction(STORE_SETTINGS, 'readwrite', (store) => store.delete(key));
   }
 
   async listProjects(): Promise<ProjectSummary[]> {

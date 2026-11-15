@@ -20,13 +20,25 @@ export type ScaleId =
   | 'dorian'
   | 'phrygian'
   | 'harmonic_minor'
+  | 'melodic_minor'
   | 'minor_pentatonic'
-  | 'locrian';
+  | 'locrian'
+  | 'major'
+  | 'lydian'
+  | 'mixolydian'
+  | 'major_pentatonic';
 
 export interface ScaleDefinition {
   readonly id: ScaleId;
   readonly label: string;
   readonly intervals: readonly number[];
+  /** 'minor' / 'major' character, used for grouping in the UI. */
+  readonly family: 'minor' | 'major';
+  /**
+   * For non-heptatonic scales (pentatonics): the 7-note parent scale used to
+   * build diatonic chords on scale degrees.
+   */
+  readonly parentScale?: ScaleId;
 }
 
 export const SCALE_DEFINITIONS: Readonly<Record<ScaleId, ScaleDefinition>> = {
@@ -34,33 +46,82 @@ export const SCALE_DEFINITIONS: Readonly<Record<ScaleId, ScaleDefinition>> = {
     id: 'natural_minor',
     label: 'Natürliches Moll (Äolisch)',
     intervals: [0, 2, 3, 5, 7, 8, 10],
+    family: 'minor',
   },
   dorian: {
     id: 'dorian',
     label: 'Dorisch',
     intervals: [0, 2, 3, 5, 7, 9, 10],
+    family: 'minor',
   },
   phrygian: {
     id: 'phrygian',
     label: 'Phrygisch',
     intervals: [0, 1, 3, 5, 7, 8, 10],
+    family: 'minor',
   },
   harmonic_minor: {
     id: 'harmonic_minor',
     label: 'Harmonisches Moll',
     intervals: [0, 2, 3, 5, 7, 8, 11],
+    family: 'minor',
+  },
+  melodic_minor: {
+    id: 'melodic_minor',
+    label: 'Melodisch Moll (Jazz)',
+    intervals: [0, 2, 3, 5, 7, 9, 11],
+    family: 'minor',
   },
   minor_pentatonic: {
     id: 'minor_pentatonic',
     label: 'Moll-Pentatonik',
     intervals: [0, 3, 5, 7, 10],
+    family: 'minor',
+    parentScale: 'natural_minor',
   },
   locrian: {
     id: 'locrian',
     label: 'Lokrisch',
     intervals: [0, 1, 3, 5, 6, 8, 10],
+    family: 'minor',
+  },
+  major: {
+    id: 'major',
+    label: 'Dur (Ionisch)',
+    intervals: [0, 2, 4, 5, 7, 9, 11],
+    family: 'major',
+  },
+  lydian: {
+    id: 'lydian',
+    label: 'Lydisch',
+    intervals: [0, 2, 4, 6, 7, 9, 11],
+    family: 'major',
+  },
+  mixolydian: {
+    id: 'mixolydian',
+    label: 'Mixolydisch',
+    intervals: [0, 2, 4, 5, 7, 9, 10],
+    family: 'major',
+  },
+  major_pentatonic: {
+    id: 'major_pentatonic',
+    label: 'Dur-Pentatonik',
+    intervals: [0, 2, 4, 7, 9],
+    family: 'major',
+    parentScale: 'major',
   },
 };
+
+/**
+ * Returns the 7-note interval set used for building chords on scale degrees
+ * (pentatonics fall back to their parent scale).
+ */
+export function getHeptatonicIntervals(scaleId: string): readonly number[] {
+  const def = getScaleDefinition(scaleId);
+  if (def.intervals.length === 7) return def.intervals;
+  if (def.parentScale) return SCALE_DEFINITIONS[def.parentScale].intervals;
+  return SCALE_DEFINITIONS.natural_minor.intervals;
+}
 
 export function normalizePitchClass(rootNote: number): number {
   if (!Number.isFinite(rootNote)) return 0;

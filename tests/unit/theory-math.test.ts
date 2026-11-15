@@ -17,8 +17,14 @@ import { ModulationRouter } from '../../src/core/modulation/ModulationRouter';
 import type { BeatSnapshot, LayerConfig } from '../../src/core/state/types';
 import { timePulseInterferenceOperator } from '../../src/core/time/operators';
 import {
+  buildHarmonyTimeline,
+  CHORD_PRESETS,
   computeCombinedCycleBeats,
   computeHarmonyFrame,
+  findStepIndexAtBeat,
+  getDiatonicChordIntervals,
+  presetToCustomSteps,
+  solveVoiceLeading,
   cycleToBeats,
   gcd,
   lcm,
@@ -54,23 +60,131 @@ describe('Theory & Scales', () => {
 
   it('computeHarmonyFrame produces scale-locked notes across all bars and progressions', () => {
     const scaleIds = Object.keys(SCALE_DEFINITIONS) as ScaleId[];
-    const progressions = Object.keys(PROGRESSION_PRESETS);
+    const progressions = Object.values(PROGRESSION_PRESETS);
 
     for (const scaleId of scaleIds) {
       const intervals = new Set(SCALE_DEFINITIONS[scaleId].intervals);
-      for (const progId of progressions) {
+      for (const prog of progressions) {
         for (let bar = 0; bar < 8; bar += 1) {
-          const frame = computeHarmonyFrame(9, scaleId, 'minor7', progId, bar);
+          const frame = computeHarmonyFrame(9, scaleId, 'minor7', prog.id, bar);
           expect(frame.scaleNotesMidi.length).toBeGreaterThan(0);
           expect(frame.chordNotesMidi.length).toBeGreaterThan(0);
 
+          const chordPcs = new Set(frame.chordNotesMidi.map((n) => ((n % 12) + 12) % 12));
           for (const note of frame.scaleNotesMidi) {
-            const pc = (((note - frame.rootNote) % 12) + 12) % 12;
-            expect(intervals.has(pc)).toBe(true);
+            if (prog.group === 'techno') {
+              // Legacy parallel progressions transpose the scale with the chord root.
+              const pc = (((note - frame.rootNote) % 12) + 12) % 12;
+              expect(intervals.has(pc)).toBe(true);
+            } else {
+              // Cadences use the key scale; only chord tones may replace scale tones.
+              const pcKey = (((note - 9) % 12) + 12) % 12;
+              const pcAbs = ((note % 12) + 12) % 12;
+              expect(intervals.has(pcKey) || chordPcs.has(pcAbs)).toBe(true);
+            }
+          }
+          // Every chord tone is playable by melody voices.
+          const scalePcs = new Set(frame.scaleNotesMidi.map((n) => n % 12));
+          if (prog.group === 'cadence') {
+            for (const pc of chordPcs) expect(scalePcs.has(pc)).toBe(true);
           }
         }
       }
     }
+  });
+});
+
+describe('Harmony Cadence Builder & Voice Leading', () => {
+  it('builds diatonic chords by stacking scale thirds', () => {
+    expect(getDiatonicChordIntervals('major', 0, 3)).toEqual([0, 4, 7]);
+    expect(getDiatonicChordIntervals('major', 1, 4)).toEqual([0, 3, 7, 10]);
+    expect(getDiatonicChordIntervals('major', 4, 4)).toEqual([0, 4, 7, 10]);
+    expect(getDiatonicChordIntervals('major', 6, 3)).toEqual([0, 3, 6]);
+    expect(getDiatonicChordIntervals('natural_minor', 5, 4)).toEqual([0, 4, 7, 11]);
+    // b9 on iii in major is dropped from the ninth chord
+    expect(getDiatonicChordIntervals('major', 2, 5)).toEqual([0, 3, 7, 10]);
+  });
+
+  it('voice leading keeps common tones and moves voices by small steps (incl. loop wrap)', () => {
+    // C - Am - F - G in C major (triads)
+    const chords = [
+      { rootPc: 0, intervals: [0, 4, 7] },
+      { rootPc: 9, intervals: [0, 3, 7] },
+      { rootPc: 5, intervals: [0, 4, 7] },
+      { rootPc: 7, intervals: [0, 4, 7] },
+    ];
+    const voicings = solveVoiceLeading(chords);
+    expect(voicings).toHaveLength(4);
+    for (let i = 0; i < voicings.length; i++) {
+      const a = voicings[i]!;
+      const b = voicings[(i + 1) % voicings.length]!;
+      const moves = a.map((x, k) => Math.abs(x - (b[k] ?? x)));
+      expect(Math.max(...moves)).toBeLessThanOrEqual(5);
+      const total = moves.reduce((s, m) => s + m, 0);
+      expect(total).toBeLessThanOrEqual(8);
+      // each voicing contains exactly the chord's pitch classes
+      const pcs = new Set(a.map((n) => n % 12));
+      const want = new Set(chords[i]!.intervals.map((iv) => (chords[i]!.rootPc + iv) % 12));
+      expect(pcs).toEqual(want);
+    }
+  });
+
+  it('caps jazz 13 chords at 6 voices', () => {
+    const v = solveVoiceLeading([
+      { rootPc: 2, intervals: CHORD_PRESETS.minor13.intervals },
+      { rootPc: 7, intervals: CHORD_PRESETS.dom13.intervals },
+    ]);
+    expect(v[0]!.length).toBeLessThanOrEqual(6);
+    expect(v[1]!.length).toBe(6);
+  });
+
+  it('custom builder steps produce a beat-accurate looping timeline', () => {
+    const timeline = buildHarmonyTimeline(
+      {
+        rootNote: 0,
+        scaleId: 'major',
+        chordPreset: 'minor7',
+        progressionId: 'static',
+        progressionMode: 'custom',
+        customSteps: [
+          { id: 'a', degree: 1, accidental: 0, chordType: 'auto', durationBeats: 2, transitionType: 'cut', transitionBeats: 0 },
+          { id: 'b', degree: 4, accidental: 0, chordType: 'dom9', durationBeats: 2, transitionType: 'glide', transitionBeats: 1 },
+          { id: 'c', degree: 0, accidental: 0, chordType: 'maj9', durationBeats: 4, transitionType: 'cut', transitionBeats: 0 },
+        ],
+      },
+      4,
+    );
+    expect(timeline.totalBeats).toBe(8);
+    expect(timeline.steps.map((st) => st.chordName)).toEqual(['Dm7', 'G9', 'Cmaj9']);
+    expect(findStepIndexAtBeat(timeline, 1.99)).toBe(0);
+    expect(findStepIndexAtBeat(timeline, 2)).toBe(1);
+    expect(findStepIndexAtBeat(timeline, 7.5)).toBe(2);
+    expect(findStepIndexAtBeat(timeline, 8.1)).toBe(0);
+    // Bass stays within a tritone of the tonic
+    for (const st of timeline.steps) {
+      expect(st.frame.rootMidi).toBeGreaterThanOrEqual(30);
+      expect(st.frame.rootMidi).toBeLessThanOrEqual(41);
+    }
+  });
+
+  it('presetToCustomSteps converts legacy and cadence presets into editable steps', () => {
+    let n = 0;
+    const id = () => `s${n++}`;
+    const legacy = presetToCustomSteps(
+      { rootNote: 9, scaleId: 'natural_minor', chordPreset: 'minor7', progressionId: 'hypnotic_i_VI' },
+      4,
+      id,
+    );
+    expect(legacy.map((st) => [st.degree, st.durationBeats])).toEqual([
+      [0, 8],
+      [5, 8],
+    ]);
+    const cad = presetToCustomSteps(
+      { rootNote: 0, scaleId: 'major', chordPreset: 'major', progressionId: 'cad_mixolydian' },
+      4,
+      id,
+    );
+    expect(cad[1]).toMatchObject({ degree: 6, accidental: -1 });
   });
 });
 

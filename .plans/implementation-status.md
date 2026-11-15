@@ -50,10 +50,14 @@
 - [x] **WP-13 (`gemini-4-hydrogen-high`)**: Entkopplung der Live-Telemetrie vom React-Root-State (`useStudioStore.ts`, `App.tsx`, `TransportBar.tsx` mit `meterFillRef`, `PhaseRadarCanvas.tsx` via `rAF` + DOM-Ref) + Offscreen-Kurven-Cache (`bgCanvasRef`) im `TimePreviewCanvas.tsx` + Entfernung von `WaveformScopeCanvas.tsx`.
 - [x] **WP-14 (`gemini-4-hydrogen-medium`)**: Korrektur der Kurven-Zykluslänge (`ModulationRouter.ts`, `TechnoEngine.ts`, `ModulationDrawer.tsx`, `CurveDrawCanvas.tsx`, `tests/unit/theory-math.test.ts`), sodass bei `Gezeichnete Kurve` (`drawn-curve`) immer die aktuelle Dauer der Kurve (`entry.curve.cycleValue`/`cycleUnit`, z. B. `10 Beats`) statt eines veralteten `4`-Beat-LFO-Werts auf der Route greift (**25/25 Vitest-Tests**).
 
-### Welle 6 (Geplant, noch nicht umgesetzt): Harmonie-, Kadenz- & Stimmführungs-Baukasten ([`06-harmony-cadence-builder.md`](./06-harmony-cadence-builder.md))
-- [ ] **WP-15 (`gemini-4-hydrogen-high`)**: Dur/Lydisch/Mixolydisch/Melodisch Moll, volle Akkordbibliothek (`Dur` bis `13`), Kadenzen-Presets & Stimmführungs-Solver (`voiceLeading.ts`).
-- [ ] **WP-16 (`gemini-4-hydrogen-high`)**: Beat-genauer Harmonie-Scheduler in `TechnoEngine.ts` (zero-alloc) + 6-stimmige `ChordArpVoice.ts` mit `glide`/`crossfade`.
-- [ ] **WP-17 (`gemini-4-hydrogen-high`)**: Einklappbarer `HarmonyBuilderPanel.tsx` + erweiterte Skalen/Akkorde/Folgen in `TransportBar.tsx`.
+### Welle 6 (Abgeschlossen, Claude Opus 5.5 direkt): Harmonie-, Kadenz- & Stimmführungs-Baukasten ([`06-harmony-cadence-builder.md`](./06-harmony-cadence-builder.md))
+- [x] **WP-15**: Dur/Lydisch/Mixolydisch/Melodisch Moll/Dur-Pentatonik, 26 Akkorde (`Dur` bis `13`), 11 Kadenzen, `progression.ts` + `voiceLeading.ts`.
+- [x] **WP-16**: Beat-genauer Harmonie-Scheduler in `TechnoEngine.ts` (zero-alloc Live-Frame) + 6-stimmige `ChordArpVoice.ts` mit `glide`/`crossfade`.
+- [x] **WP-17**: `HarmonyBuilderPanel.tsx` + gruppierte Skalen/Akkorde/Folgen in `TransportBar.tsx`.
+
+### Welle 8 (Abgeschlossen): Feedback-Runde 2 ([`08-feedback-runde-2.md`](./08-feedback-runde-2.md))
+- [x] Doppelte Layer-IDs (Glocken-Bug) + Reparatur alter Projekte, Glocken-DSP, Säule-2-Drag entfernt, Arp bis 1/64, Export bis 256 Takte + „Volle Wiederholung“ + Pre-Roll-Fix, Speichern/Ordner-UX, Layer-Gruppen (**41/41 Vitest-Tests**, `vite build` ✓).
+- [x] Nachtrag: Euklidischer Rhythmus-Operator (`time-euclid`), Baukasten bis 128 Akkorde × 0,5–128 Beats, übermäßige Akkorde (**46/46 Vitest-Tests**).
 
 ### Welle 7 (Abgeschlossen): Oberstimmen-Voices & Dual-Voice-Kombination ([`07-voices-upper-melody-and-blend.md`](./07-voices-upper-melody-and-blend.md))
 - [x] **WP-18 (`gemini-4-hydrogen-high`)**: `ModalBellVoice` (`modal-bell` / `Glocke & Mallet`) & `PipeOrganVoice` (`pipe-organ` / `Orgelpipes & Zugriegel`) inkl. Registrierung in `defaultRegistry.ts`.
@@ -74,5 +78,11 @@
   - Bei 48 kHz führten 8-Sample-Control-Subblocks + unindexierte Modulations-Scans zu ~7,5 s Renderzeit pro 10 s Stereo-Audio. Durch `CONTROL_SUBBLOCK_SIZE = 32`, `hasTargetRoutes`-Vorabindizierung in `ModulationRouter`, zero-alloc `evaluateTimeInto` und Fast-Paths für eingeschwungene `OnePoleSmoother` sank die Laufzeit im Supervisor-Testlauf auf `934 ms` (< 1000 ms Budget, >10x Realtime).
 
 ## 5. Ausstehende Arbeitsschritte & Nächste Schritte
-1. Optional: Akustischer Hörtest durch den Benutzer im laufenden Browser (`http://localhost:5173/`) und bei Bedarf Fein-Tuning von Starter-Presets oder neuen Klang-Karten.
-2. Bei Bedarf `git status` prüfen und einen sauberen Meilenstein-Commit anlegen.
+1. Hörtest durch den Benutzer im Browser (`npm run dev`): Glocken, Akkord-Baukasten (Glide/Blende), Speichern mit echtem Ordner, langer Export.
+2. Meilenstein-Commit (noch nicht erfolgt – nur auf Wunsch).
+3. **Vorgeschlagene nächste Features gegen Eintönigkeit (Entscheidung durch Nutzer offen):**
+   - **Motiv-Entwicklung** für Glocke/Orgel: deterministische Variation pro Phrase (Transposition, Umkehrung, Krebs, Ruf & Antwort alle 4/8 Zyklen) – wiederholt sich erst nach langer Periode.
+   - **Fill/Turnaround-Takt**: letzter Takt jeder 4/8/16-Takt-Phrase variiert automatisch (Dichte, Oktave, Filter).
+   - **Seed-Zufall mit Periode** („Würfel“ der sich nach N Takten wiederholt): Ghost-Notes, Note-Auslassung, Velocity.
+   - **Song-Kette**: Sections mit Taktanzahl hintereinander abspielen und als ein langes WAV exportieren.
+   - **Akkord-Melodie-Kopplung**: Glocke trifft auf betonten Zählzeiten Akkordtöne, dazwischen Durchgangstöne.

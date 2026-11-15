@@ -83,4 +83,13 @@ export class MasterClock {
   public reset(): void {
     this._totalSamples = 0;
   }
+
+  /** Moves the clock to an absolute (non-negative) beat position. */
+  public seekToBeat(beat: number): void {
+    if (!Number.isFinite(beat) || beat <= 0) {
+      this._totalSamples = 0;
+      return;
+    }
+    this._totalSamples = Math.round(beat * this.samplesPerBeat);
+  }
 }

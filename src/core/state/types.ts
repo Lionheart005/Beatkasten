@@ -1,6 +1,9 @@
 import type { DrawnCurveData } from '../math/curves';
 import type { WaveformType } from '../math/waves';
 import type { CycleUnit } from '../theory/cycles';
+import type { ChordStepConfig, ProgressionMode } from '../theory/progression';
+
+export type { ChordStepConfig, ProgressionMode };
 
 export interface OperatorConfig {
   readonly id: string;
@@ -63,6 +66,8 @@ export interface SecondaryVoiceConfig {
 export interface LayerConfig {
   readonly id: string;
   readonly name: string;
+  /** Optional group name for organising the layer stack (UI only). */
+  readonly group?: string;
   readonly color: string;
   readonly enabled: boolean;
   readonly muted: boolean;
@@ -98,6 +103,11 @@ export interface BeatSnapshot {
     readonly scaleId: string;
     readonly chordPreset: string;
     readonly progressionId: string;
+    /** 'preset' (default) uses `progressionId`, 'custom' the builder steps. */
+    readonly progressionMode?: ProgressionMode;
+    readonly customSteps?: readonly ChordStepConfig[];
+    /** Default true. */
+    readonly voiceLeadingEnabled?: boolean;
   };
   readonly curves: readonly DrawnCurveData[];
   readonly layers: readonly LayerConfig[];

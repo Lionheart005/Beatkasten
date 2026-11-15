@@ -11,6 +11,7 @@ import {
   createChordToOffbeatArpPreset,
   createTripletRiddlePreset,
   jumpToHistoryNode,
+  repairProjectIds,
   stepRedoFirstChild,
   stepUndo,
   toggleBookmark,
@@ -27,8 +28,10 @@ import type { CycleUnit } from '../../core/theory/cycles';
 import {
   BrowserFsAdapter,
   IndexedDbAdapter,
+  type FsDirectoryHandleLike,
   type ProjectSummary,
 } from '../../storage';
+import { moveLayerInStack } from './layerGroups';
 
 export interface ActiveModTarget {
   readonly layerId: string;
@@ -43,8 +46,17 @@ export interface ActiveModTarget {
 
 export type SectionSwitchMode = 'immediate' | 'next-bar';
 
+export interface SaveState {
+  readonly status: 'idle' | 'saving' | 'saved' | 'error';
+  readonly at: number | null;
+  /** Human readable target, e.g. "Ordner Musik/Cooler_Beat". */
+  readonly location: string;
+}
+
+const FOLDER_HANDLE_SETTING = 'projectFolderHandle';
+
 let uiIdCounter = 0;
-function nextUiId(prefix: string): string {
+export function nextUiId(prefix: string): string {
   uiIdCounter += 1;
   return `${prefix}_${Date.now().toString(36)}_${uiIdCounter.toString(36)}`;
 }
@@ -90,6 +102,15 @@ export function useStudioStore() {
   const [fsFolderName, setFsFolderName] = useState<string | null>(null);
   const [savedProjects, setSavedProjects] = useState<ProjectSummary[]>([]);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>({
+    status: 'idle',
+    at: null,
+    location: 'Browser-Speicher',
+  });
+  const [pendingFolderName, setPendingFolderName] = useState<string | null>(null);
+  const pendingFolderHandleRef = useRef<FsDirectoryHandleLike | null>(null);
+  const saveInFlightRef = useRef<boolean>(false);
+  const saveQueuedDocRef = useRef<ProjectDocument | null>(null);
 
   const projectRef = useRef<ProjectDocument>(project);
   projectRef.current = project;
@@ -112,17 +133,41 @@ export function useStudioStore() {
     }, 2800);
   }, []);
 
+  /**
+   * Autosave (IndexedDB + connected folder). Saves are serialised and coalesced:
+   * while one save runs, only the newest pending document is written afterwards.
+   */
   const persistProject = useCallback(async (doc: ProjectDocument) => {
-    try {
-      if (idbAdapterSingleton.isSupported()) {
-        await idbAdapterSingleton.saveProject(doc);
-      }
-      if (fsAdapterSingleton.hasRootDirectory()) {
-        await fsAdapterSingleton.saveProject(doc);
-      }
-    } catch {
-      // Autosave should never interrupt live performance
+    if (saveInFlightRef.current) {
+      saveQueuedDocRef.current = doc;
+      return;
     }
+    saveInFlightRef.current = true;
+    setSaveState((prev) => ({ ...prev, status: 'saving' }));
+    let current: ProjectDocument | null = doc;
+    while (current) {
+      try {
+        if (idbAdapterSingleton.isSupported()) {
+          await idbAdapterSingleton.saveProject(current);
+        }
+        let location = 'Browser-Speicher (kein Ordner verbunden)';
+        if (fsAdapterSingleton.hasRootDirectory()) {
+          await fsAdapterSingleton.saveProject(current);
+          location = `Ordner ${fsAdapterSingleton.describeProjectLocation(current.name, current.id)}`;
+        }
+        setSaveState({ status: 'saved', at: Date.now(), location });
+      } catch (err) {
+        // Autosave must never interrupt live performance — just show the state.
+        setSaveState({
+          status: 'error',
+          at: Date.now(),
+          location: err instanceof Error ? err.message : 'Speichern fehlgeschlagen',
+        });
+      }
+      current = saveQueuedDocRef.current;
+      saveQueuedDocRef.current = null;
+    }
+    saveInFlightRef.current = false;
   }, []);
 
   const refreshSavedProjects = useCallback(async () => {
@@ -148,7 +193,8 @@ export function useStudioStore() {
         if (cancelled) return;
         setSavedProjects(list);
         if (list.length > 0) {
-          const loaded = await idbAdapterSingleton.loadProject(list[0]!.id);
+          const loadedRaw = await idbAdapterSingleton.loadProject(list[0]!.id);
+          const loaded = loadedRaw ? repairProjectIds(loadedRaw) : null;
           if (!cancelled && loaded) {
             setProject(loaded);
             setSelectedLayerId(loaded.activeSnapshot.layers[0]?.id ?? '');
@@ -164,6 +210,29 @@ export function useStudioStore() {
       }
     })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Restore the remembered project folder (permission may need one click again)
+  useEffect(() => {
+    if (!idbAdapterSingleton.isSupported() || !fsAdapterSingleton.isSupported()) return;
+    let cancelled = false;
+    (async () => {
+      const handle = await idbAdapterSingleton.loadSetting<FsDirectoryHandleLike>(
+        FOLDER_HANDLE_SETTING,
+      );
+      if (cancelled || !handle) return;
+      if (await fsAdapterSingleton.ensurePermission(handle, false)) {
+        fsAdapterSingleton.setRootDirectory(handle);
+        setFsConnected(true);
+        setFsFolderName(handle.name);
+      } else {
+        pendingFolderHandleRef.current = handle;
+        setPendingFolderName(handle.name);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -482,6 +551,81 @@ export function useStudioStore() {
       }
     },
     [activeModTarget, commitSnapshotImmediate, showNotice],
+  );
+
+  /** Moves a layer (or a whole group when `wholeGroup`) one block up/down. */
+  const moveLayer = useCallback(
+    (layerId: string, direction: -1 | 1, wholeGroup = false) => {
+      const layers = projectRef.current.activeSnapshot.layers;
+      const next = moveLayerInStack(layers, layerId, direction, wholeGroup);
+      if (next === layers) return;
+      const target = layers.find((l) => l.id === layerId);
+      commitSnapshotImmediate(
+        (snap) => ({ ...snap, layers: moveLayerInStack(snap.layers, layerId, direction, wholeGroup) }),
+        wholeGroup
+          ? `Gruppe verschoben: ${target?.group ?? ''}`
+          : `Layer verschoben: ${target?.name ?? layerId}`,
+      );
+    },
+    [commitSnapshotImmediate],
+  );
+
+  /** Assigns a layer to a group ('' = no group) and keeps group members together. */
+  const setLayerGroup = useCallback(
+    (layerId: string, group: string) => {
+      const name = group.trim();
+      commitSnapshotImmediate((snap) => {
+        const layer = snap.layers.find((l) => l.id === layerId);
+        if (!layer) return snap;
+        const updated: LayerConfig = name ? { ...layer, group: name } : { ...layer, group: undefined };
+        const rest = snap.layers.filter((l) => l.id !== layerId);
+        let insertAt = snap.layers.findIndex((l) => l.id === layerId);
+        if (name) {
+          let lastIdx = -1;
+          rest.forEach((l, i) => {
+            if (l.group === name) lastIdx = i;
+          });
+          if (lastIdx >= 0) insertAt = lastIdx + 1;
+        }
+        insertAt = Math.max(0, Math.min(rest.length, insertAt));
+        return { ...snap, layers: [...rest.slice(0, insertAt), updated, ...rest.slice(insertAt)] };
+      }, name ? `Gruppe „${name}“ zugewiesen` : 'Aus Gruppe entfernt');
+    },
+    [commitSnapshotImmediate],
+  );
+
+  const renameLayerGroup = useCallback(
+    (oldName: string, newName: string) => {
+      const name = newName.trim();
+      if (!name || name === oldName) return;
+      commitSnapshotImmediate(
+        (snap) => ({
+          ...snap,
+          layers: snap.layers.map((l) => (l.group === oldName ? { ...l, group: name } : l)),
+        }),
+        `Gruppe umbenannt: ${oldName} → ${name}`,
+      );
+    },
+    [commitSnapshotImmediate],
+  );
+
+  /** Toggles mute / solo / enabled for all layers of a group. */
+  const toggleGroupFlag = useCallback(
+    (groupName: string, flag: 'muted' | 'solo' | 'enabled') => {
+      const members = projectRef.current.activeSnapshot.layers.filter(
+        (l) => l.group === groupName,
+      );
+      if (members.length === 0) return;
+      const allOn = members.every((l) => l[flag]);
+      commitSnapshotImmediate(
+        (snap) => ({
+          ...snap,
+          layers: snap.layers.map((l) => (l.group === groupName ? { ...l, [flag]: !allOn } : l)),
+        }),
+        `Gruppe ${groupName}: ${flag === 'muted' ? 'Mute' : flag === 'solo' ? 'Solo' : 'Ein/Aus'}`,
+      );
+    },
+    [commitSnapshotImmediate],
   );
 
   const switchLayerVoice = useCallback(
@@ -1034,12 +1178,29 @@ export function useStudioStore() {
       return;
     }
     try {
-      const handle = await fsAdapterSingleton.pickRootDirectory();
+      // One-click reconnect of the remembered folder, otherwise pick a new one.
+      let handle: FsDirectoryHandleLike | null = null;
+      const pending = pendingFolderHandleRef.current;
+      if (pending && (await fsAdapterSingleton.ensurePermission(pending, true))) {
+        fsAdapterSingleton.setRootDirectory(pending);
+        handle = pending;
+      } else {
+        handle = await fsAdapterSingleton.pickRootDirectory();
+      }
+      pendingFolderHandleRef.current = null;
+      setPendingFolderName(null);
       setFsConnected(true);
       setFsFolderName(handle.name);
-      await fsAdapterSingleton.saveProject(projectRef.current);
+      try {
+        await idbAdapterSingleton.saveSetting(FOLDER_HANDLE_SETTING, handle);
+      } catch {
+        // remembering the folder is optional
+      }
       await refreshSavedProjects();
-      showNotice(`Projekt-Ordner verbunden: ${handle.name}`);
+      await persistProject(projectRef.current);
+      showNotice(
+        `Projekt-Ordner verbunden: „${handle.name}“ — Projekte werden ab jetzt automatisch in ${fsAdapterSingleton.describeProjectLocation(projectRef.current.name, projectRef.current.id)} gespeichert.`,
+      );
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       showNotice(
@@ -1048,8 +1209,15 @@ export function useStudioStore() {
           : 'Ordner konnte nicht verbunden werden.',
       );
     }
-  }, [refreshSavedProjects, showNotice]);
+  }, [persistProject, refreshSavedProjects, showNotice]);
 
+  const pickOtherProjectFolder = useCallback(async () => {
+    pendingFolderHandleRef.current = null;
+    setPendingFolderName(null);
+    await connectProjectFolder();
+  }, [connectProjectFolder]);
+
+  /** Saves the open project; a changed name renames it (same project, folder moves). */
   const saveCurrentProjectExplicit = useCallback(
     async (newName?: string) => {
       flushPendingCommit();
@@ -1061,7 +1229,30 @@ export function useStudioStore() {
       setProject(updatedDoc);
       await persistProject(updatedDoc);
       await refreshSavedProjects();
-      showNotice(`Projekt gespeichert: ${updatedDoc.name}`);
+      showNotice(
+        fsAdapterSingleton.hasRootDirectory()
+          ? `Gespeichert: ${fsAdapterSingleton.describeProjectLocation(updatedDoc.name, updatedDoc.id)}`
+          : `Gespeichert im Browser-Speicher: ${updatedDoc.name} (für Dateien einen Projekt-Ordner verbinden)`,
+      );
+    },
+    [flushPendingCommit, persistProject, refreshSavedProjects, showNotice],
+  );
+
+  /** Saves a copy under a new name (new project id) and switches to the copy. */
+  const saveProjectCopy = useCallback(
+    async (copyName: string) => {
+      flushPendingCommit();
+      const name = copyName.trim() || `${projectRef.current.name}_Kopie`;
+      const copy: ProjectDocument = {
+        ...projectRef.current,
+        id: nextUiId('proj'),
+        name,
+        updatedAt: Date.now(),
+      };
+      setProject(copy);
+      await persistProject(copy);
+      await refreshSavedProjects();
+      showNotice(`Kopie gespeichert und geöffnet: ${name}`);
     },
     [flushPendingCommit, persistProject, refreshSavedProjects, showNotice],
   );
@@ -1097,10 +1288,11 @@ export function useStudioStore() {
     async (projectIdOrName: string) => {
       flushPendingCommit();
       try {
-        const loaded = fsAdapterSingleton.hasRootDirectory()
+        const loadedRaw = fsAdapterSingleton.hasRootDirectory()
           ? ((await fsAdapterSingleton.loadProject(projectIdOrName)) ??
             (await idbAdapterSingleton.loadProject(projectIdOrName)))
           : await idbAdapterSingleton.loadProject(projectIdOrName);
+        const loaded = loadedRaw ? repairProjectIds(loadedRaw) : null;
         if (!loaded) {
           showNotice('Projekt konnte nicht geladen werden.');
           return;
@@ -1166,6 +1358,8 @@ export function useStudioStore() {
     isPlaying,
     fsConnected,
     fsFolderName,
+    pendingFolderName,
+    saveState,
     fsSupported: fsAdapterSingleton.isSupported(),
     savedProjects,
     statusNotice,
@@ -1207,7 +1401,13 @@ export function useStudioStore() {
     overwriteSectionWithCurrent,
     deleteSection,
     connectProjectFolder,
+    pickOtherProjectFolder,
     saveCurrentProjectExplicit,
+    saveProjectCopy,
+    moveLayer,
+    setLayerGroup,
+    renameLayerGroup,
+    toggleGroupFlag,
     createNewProject,
     loadProjectById,
     refreshSavedProjects,

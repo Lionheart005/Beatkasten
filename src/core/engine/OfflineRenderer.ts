@@ -83,6 +83,17 @@ export function renderOfflineLoop(
   const chunkL = new Float32Array(OFFLINE_CHUNK_SIZE);
   const chunkR = new Float32Array(OFFLINE_CHUNK_SIZE);
 
+  // Start the pre-roll early enough that the exported loop begins on a
+  // multiple of the loop length (musically "bar 1" when the loop length is a
+  // multiple of the full repetition) instead of in the middle of the pattern.
+  if (preRollSamples > 0) {
+    const beatsPerBar = samplesPerBar / ((60 / clamp(snapshot.tempoBpm, 20, 300)) * sampleRate);
+    const loopBeats = bars * beatsPerBar;
+    const preRollBeats = preRollBars * beatsPerBar;
+    const loopsBack = Math.ceil(preRollBeats / loopBeats - 1e-9);
+    engine.seekToBeat(loopsBack * loopBeats - preRollBeats);
+  }
+
   // Render and discard pre-roll bars so spatial tails (delay/reverb) settle.
   let remainingPreRoll = preRollSamples;
   while (remainingPreRoll > 0) {

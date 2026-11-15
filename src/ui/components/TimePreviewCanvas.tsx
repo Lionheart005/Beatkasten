@@ -156,6 +156,9 @@ export function TimePreviewCanvas({
       pulseSlope: 0,
     };
 
+    // Per-operator scratch memory, mirroring LayerEngine slot state.
+    const opStates = layer.timeOperators.map(() => new Float64Array(4).fill(Number.NaN));
+
     for (let i = 0; i < samples; i++) {
       const p = i / samples;
       let frame: PreviewTimeFrame = {
@@ -167,11 +170,16 @@ export function TimePreviewCanvas({
         pulseSlope: prevFrame.pulseSlope ?? 0,
       };
       let hasPulseGenerator = false;
-      for (const opCfg of layer.timeOperators) {
+      for (let opIdx = 0; opIdx < layer.timeOperators.length; opIdx++) {
+        const opCfg = layer.timeOperators[opIdx]!;
         if (opCfg.bypassed) continue;
         const mod = defaultRegistry.getTimeOperator(opCfg.moduleId);
         if (!mod) continue;
-        if (opCfg.moduleId === 'time-pulse-interference') {
+        const hadPulseSource = hasPulseGenerator;
+        if (
+          opCfg.moduleId === 'time-pulse-interference' ||
+          opCfg.moduleId === 'time-euclid'
+        ) {
           hasPulseGenerator = true;
         }
         frame = mod.evaluateTime(
@@ -183,6 +191,8 @@ export function TimePreviewCanvas({
             cycleBeats,
             beatsPerBar,
             sampleRate: 48000,
+            slotState: opStates[opIdx],
+            hasPulseSource: hadPulseSource,
           },
           opCfg.params,
           frame,

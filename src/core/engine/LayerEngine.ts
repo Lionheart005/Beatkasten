@@ -51,6 +51,13 @@ interface TimeOpSlot {
   wasModulated: boolean;
   baseParams: Record<string, number>;
   readonly effectiveParams: Record<string, number>;
+  /** Scratch memory for stateful operators (e.g. last euclidean step). */
+  readonly state: Float64Array;
+}
+
+/** Time operators that generate rhythmic pulses (otherwise energy is flat 1). */
+function isPulseGenerator(moduleId: string): boolean {
+  return moduleId === 'time-pulse-interference' || moduleId === 'time-euclid';
 }
 
 interface ProcessorSlot {
@@ -72,6 +79,8 @@ interface MutableTimeEvalContext {
   cycleBeats: number;
   beatsPerBar: number;
   sampleRate: number;
+  slotState: Float64Array | undefined;
+  hasPulseSource: boolean;
 }
 
 interface MutableVoiceRenderContext {
@@ -203,6 +212,8 @@ export class LayerEngine {
       cycleBeats: 4,
       beatsPerBar: 4,
       sampleRate: this.sampleRate,
+      slotState: undefined,
+      hasPulseSource: false,
     };
 
     this.voiceCtx = {
@@ -284,6 +295,7 @@ export class LayerEngine {
     this.frameB.stepIndex = -1;
     this.frameB.pulseSlope = 0;
     this.prevFrame = this.frameA;
+    for (const slot of this.timeOpCache.values()) slot.state.fill(Number.NaN);
     this.voiceWasModulated = false;
     this.secondaryVoiceWasModulated = false;
     this.prevPulseTrigger = 0;
@@ -367,6 +379,7 @@ export class LayerEngine {
           wasModulated: false,
           baseParams: opCfg.params,
           effectiveParams: buildDefaultParams(opMod),
+          state: new Float64Array(4).fill(Number.NaN),
         };
         this.timeOpCache.set(opCfg.id, slot);
       } else {
@@ -759,9 +772,8 @@ export class LayerEngine {
       const slot = this.timeOpSlots[i]!;
       if (slot.bypassed) continue;
 
-      if (slot.moduleId === 'time-pulse-interference') {
-        hasPulseGenerator = true;
-      }
+      this.timeCtx.slotState = slot.state;
+      this.timeCtx.hasPulseSource = hasPulseGenerator;
 
       if (router.hasTargetRoutes(cfg, 'time', slot.id, slot.moduleId)) {
         router.applyTargetModulation(
@@ -799,6 +811,7 @@ export class LayerEngine {
         next.stepIndex = res.stepIndex;
         next.pulseSlope = res.pulseSlope ?? 0;
       }
+      if (isPulseGenerator(slot.moduleId)) hasPulseGenerator = true;
       const tmp = cur;
       cur = next;
       next = tmp;

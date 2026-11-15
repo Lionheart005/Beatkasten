@@ -387,9 +387,232 @@ export const timePulseInterferenceOperator: TimeOperatorModule = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Euklidischer Rhythmus: k Schläge so gleichmäßig wie möglich auf n Steps
+// ---------------------------------------------------------------------------
+
+const EUCLID_MAX_STEPS = 32;
+
+/** Bjorklund's algorithm: canonical euclidean rhythm (e.g. 5/8 -> x.xx.xx.). */
+function bjorklund(hits: number, steps: number): number[] {
+  if (hits <= 0) return new Array<number>(steps).fill(0);
+  if (hits >= steps) return new Array<number>(steps).fill(1);
+  let a: number[][] = Array.from({ length: hits }, () => [1]);
+  let b: number[][] = Array.from({ length: steps - hits }, () => [0]);
+  while (b.length > 1) {
+    const m = Math.min(a.length, b.length);
+    const merged: number[][] = [];
+    for (let i = 0; i < m; i++) merged.push([...a[i]!, ...b[i]!]);
+    const rest = a.length > m ? a.slice(m) : b.slice(m);
+    a = merged;
+    b = rest;
+  }
+  return [...a.flat(), ...b.flat()];
+}
+
+// Pre-computed tables (built once at module load, zero allocation in the audio path):
+// EUCLID_ORDINAL[n][k][i] = index of the hit at step i (0 = first hit), or -1 for a rest.
+const EUCLID_ORDINAL: Int8Array[][] = [];
+for (let n = 0; n <= EUCLID_MAX_STEPS; n++) {
+  const row: Int8Array[] = [];
+  for (let k = 0; k <= n; k++) {
+    const pattern = n > 0 ? bjorklund(k, n) : [];
+    const ord = new Int8Array(n);
+    let count = 0;
+    for (let i = 0; i < n; i++) ord[i] = pattern[i] ? count++ : -1;
+    row.push(ord);
+  }
+  EUCLID_ORDINAL.push(row);
+}
+
+/** Hit ordinal of (unrotated) step `i` in a euclidean (k, n) rhythm, -1 = rest. */
+export function euclidHitOrdinal(i: number, hits: number, steps: number): number {
+  const n = Math.max(1, Math.min(EUCLID_MAX_STEPS, steps | 0));
+  const k = Math.max(0, Math.min(n, hits | 0));
+  return EUCLID_ORDINAL[n]![k]![((i % n) + n) % n]!;
+}
+
+/** True if (unrotated) step `i` of an euclidean (k, n) rhythm is a hit. */
+export function isEuclidHit(i: number, hits: number, steps: number): boolean {
+  return euclidHitOrdinal(i, hits, steps) >= 0;
+}
+
+/** Full pattern incl. rotation (later = positive rotation). For UI previews. */
+export function euclidPattern(steps: number, hits: number, rotation: number): boolean[] {
+  const n = Math.max(1, Math.round(steps));
+  const k = Math.max(0, Math.min(n, Math.round(hits)));
+  const rot = ((Math.round(rotation) % n) + n) % n;
+  const out: boolean[] = [];
+  for (let s = 0; s < n; s++) out.push(isEuclidHit((s - rot + n) % n, k, n));
+  return out;
+}
+
+const EUCLID_STEPS_PARAM: ParameterSchema = {
+  id: 'euclidSteps',
+  label: 'Steps (Raster)',
+  description:
+    'In wie viele gleich lange Schritte der Layer-Zyklus geteilt wird (z. B. 16 = Sechzehntel bei 4 Beats).',
+  domain: 'time',
+  min: 1,
+  max: 32,
+  step: 1,
+  defaultValue: 16,
+  curve: 'linear',
+  modulatable: false,
+};
+
+const EUCLID_HITS_PARAM: ParameterSchema = {
+  id: 'euclidHits',
+  label: 'Schläge',
+  description:
+    'Wie viele Schläge möglichst gleichmäßig auf die Steps verteilt werden (3 auf 8 = Tresillo, 5 auf 8 = Cinquillo). Bewegbar für wachsende Dichte.',
+  domain: 'time',
+  min: 0,
+  max: 32,
+  step: 1,
+  defaultValue: 5,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const EUCLID_ROTATION_PARAM: ParameterSchema = {
+  id: 'euclidRotation',
+  label: 'Verschiebung',
+  description: 'Rotiert das Muster um ganze Steps nach hinten – gleiche Verteilung, anderer Groove.',
+  domain: 'time',
+  min: 0,
+  max: 31,
+  step: 1,
+  defaultValue: 0,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const EUCLID_GATE_PARAM: ParameterSchema = {
+  id: 'euclidGate',
+  label: 'Ton-Länge',
+  description: 'Wie lange jeder Schlag innerhalb seines Steps klingt (kurz = staccato, 1 = ganzer Step).',
+  domain: 'time',
+  min: 0.05,
+  max: 1,
+  defaultValue: 0.5,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const EUCLID_ACCENT_PARAM: ParameterSchema = {
+  id: 'euclidAccent',
+  label: 'Akzent auf dem ersten Schlag',
+  description: '0 = alle Schläge gleich laut, 1 = der erste Schlag des Musters deutlich betont.',
+  domain: 'time',
+  min: 0,
+  max: 1,
+  defaultValue: 0.35,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const EUCLID_MODE_PARAM: ParameterSchema = {
+  id: 'euclidMode',
+  label: 'Modus',
+  description:
+    'Eigener Puls = erzeugt den Rhythmus selbst. Maske = lässt nur die Pulse der Puls-Interferenz durch, die auf einen Schlag fallen.',
+  domain: 'time',
+  min: 0,
+  max: 1,
+  step: 1,
+  defaultValue: 0,
+  curve: 'linear',
+  modulatable: false,
+  options: [
+    { value: 0, label: 'Eigener Puls' },
+    { value: 1, label: 'Maske über Puls-Interferenz' },
+  ],
+};
+
+export const timeEuclidOperator: TimeOperatorModule = {
+  id: 'time-euclid',
+  version: 1,
+  displayName: 'Euklidischer Rhythmus',
+  description:
+    'Verteilt k Schläge möglichst gleichmäßig auf n Steps des Zyklus – die Formel hinter vielen Welt-Rhythmen (Tresillo, Clave, Bossa).',
+  parameters: [
+    EUCLID_STEPS_PARAM,
+    EUCLID_HITS_PARAM,
+    EUCLID_ROTATION_PARAM,
+    EUCLID_GATE_PARAM,
+    EUCLID_ACCENT_PARAM,
+    EUCLID_MODE_PARAM,
+  ],
+  evaluateTimeInto(
+    ctx: TimeEvalContext,
+    params: Record<string, number>,
+    prevFrame: TimeFrame,
+    outFrame: MutableTimeFrame,
+  ): void {
+    const n = Math.max(1, Math.round(readParam(EUCLID_STEPS_PARAM, params)));
+    const k = Math.max(0, Math.min(n, Math.round(readParam(EUCLID_HITS_PARAM, params))));
+    const rot = ((Math.round(readParam(EUCLID_ROTATION_PARAM, params)) % n) + n) % n;
+    const gate = readParam(EUCLID_GATE_PARAM, params);
+    const accentAmt = readParam(EUCLID_ACCENT_PARAM, params);
+    const maskMode = Math.round(readParam(EUCLID_MODE_PARAM, params)) === 1;
+
+    const p = wrapPhase01(prevFrame.warpedPhase);
+    const pos = p * n;
+    let step = Math.floor(pos);
+    if (step >= n) step = n - 1;
+    const frac = pos - step;
+    const src = (step - rot + n) % n;
+    // Ordinal of this hit inside the pattern (0 = first hit of the cycle, -1 = rest).
+    const ordinal = euclidHitOrdinal(src, k, n);
+    const hit = ordinal >= 0;
+    const velocity = hit ? (ordinal === 0 ? 1 : 1 - 0.45 * accentAmt) : 0;
+    const inGate = hit && frac < gate;
+
+    // Step-change detection uses the engine-owned slot memory (operators are shared).
+    const state = ctx.slotState;
+    const prevStep = state ? state[0]! : prevFrame.stepIndex;
+    const isNewStep = step !== prevStep;
+    if (state) state[0] = step;
+
+    outFrame.warpedPhase = p;
+    if (maskMode && ctx.hasPulseSource) {
+      outFrame.pulseEnergy = inGate ? prevFrame.pulseEnergy * velocity : 0;
+      outFrame.triggerIntensity = hit ? prevFrame.triggerIntensity * velocity : 0;
+      outFrame.accent = hit ? prevFrame.accent * velocity : 0;
+      outFrame.stepIndex = prevFrame.stepIndex;
+      outFrame.pulseSlope = prevFrame.pulseSlope ?? 0;
+      return;
+    }
+
+    outFrame.pulseEnergy = inGate ? velocity * (1 - 0.3 * (frac / gate)) : 0;
+    outFrame.triggerIntensity = hit && isNewStep ? velocity : 0;
+    outFrame.accent = velocity;
+    outFrame.stepIndex = step;
+    outFrame.pulseSlope = inGate ? -0.3 / gate : 0;
+  },
+  evaluateTime(
+    ctx: TimeEvalContext,
+    params: Record<string, number>,
+    prevFrame: TimeFrame,
+  ): TimeFrame {
+    const out: MutableTimeFrame = {
+      warpedPhase: 0,
+      pulseEnergy: 0,
+      triggerIntensity: 0,
+      accent: 0,
+      stepIndex: 0,
+      pulseSlope: 0,
+    };
+    this.evaluateTimeInto!(ctx, params, prevFrame, out);
+    return out;
+  },
+};
+
 export const TIME_OPERATORS: readonly TimeOperatorModule[] = [
   timeWarpOperator,
   timeGridGravityOperator,
   timePhaseDriftOperator,
   timePulseInterferenceOperator,
+  timeEuclidOperator,
 ];

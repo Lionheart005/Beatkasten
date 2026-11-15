@@ -3,6 +3,7 @@ import { ExportModal } from './components/ExportModal';
 import { PhaseRadarCanvas } from './components/PhaseRadarCanvas';
 import { ProjectModal } from './components/ProjectModal';
 import { TimePreviewCanvas } from './components/TimePreviewCanvas';
+import { HarmonyBuilderPanel } from './panels/HarmonyBuilderPanel';
 import { LayerInspector } from './panels/LayerInspector';
 import { LayerStackPanel } from './panels/LayerStackPanel';
 import { SectionsAndHistoryPanel } from './panels/SectionsAndHistoryPanel';
@@ -13,6 +14,7 @@ export function App() {
   const store = useStudioStore();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isHarmonyBuilderOpen, setIsHarmonyBuilderOpen] = useState(false);
 
   // Global keyboard shortcuts: Ctrl+Z (Undo), Ctrl+Y / Ctrl+Shift+Z (Redo)
   useEffect(() => {
@@ -62,6 +64,10 @@ export function App() {
         getTelemetry={store.getTelemetry}
         fsConnected={store.fsConnected}
         fsFolderName={store.fsFolderName}
+        pendingFolderName={store.pendingFolderName}
+        saveState={store.saveState}
+        harmonyBuilderOpen={isHarmonyBuilderOpen}
+        onToggleHarmonyBuilder={() => setIsHarmonyBuilderOpen((v) => !v)}
         onTogglePlay={() => void store.togglePlay()}
         onRestart={() => void store.restartFromBarOne()}
         onUpdateSnapshotLive={store.updateSnapshotLive}
@@ -103,6 +109,16 @@ export function App() {
         </div>
       </section>
 
+      {isHarmonyBuilderOpen && (
+        <HarmonyBuilderPanel
+          snapshot={store.snapshot}
+          isPlaying={store.isPlaying}
+          subscribeTelemetry={store.subscribeTelemetry}
+          onCommitSnapshotImmediate={store.commitSnapshotImmediate}
+          onClose={() => setIsHarmonyBuilderOpen(false)}
+        />
+      )}
+
       {/* Main 3-Area Workspace */}
       <main className="studio-workspace">
         <LayerStackPanel
@@ -117,6 +133,10 @@ export function App() {
           onDeleteLayer={store.deleteLayer}
           onUpdateLayerLive={store.updateLayerLive}
           onCommitLayerImmediate={store.commitLayerImmediate}
+          onMoveLayer={store.moveLayer}
+          onSetLayerGroup={store.setLayerGroup}
+          onRenameGroup={store.renameLayerGroup}
+          onToggleGroupFlag={store.toggleGroupFlag}
         />
 
         <LayerInspector
@@ -183,14 +203,20 @@ export function App() {
 
       <ProjectModal
         isOpen={isProjectModalOpen}
+        currentProjectId={store.project.id}
         currentProjectName={store.project.name}
         savedProjects={store.savedProjects}
         fsConnected={store.fsConnected}
         fsFolderName={store.fsFolderName}
+        pendingFolderName={store.pendingFolderName}
+        saveState={store.saveState}
         onRefresh={store.refreshSavedProjects}
         onSaveAs={store.saveCurrentProjectExplicit}
+        onSaveCopy={store.saveProjectCopy}
         onCreateNew={store.createNewProject}
         onLoadProject={store.loadProjectById}
+        onConnectFolder={store.connectProjectFolder}
+        onPickOtherFolder={store.pickOtherProjectFolder}
         onClose={() => setIsProjectModalOpen(false)}
       />
 

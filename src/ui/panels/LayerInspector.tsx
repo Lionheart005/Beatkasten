@@ -4,12 +4,13 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
-  GripVertical,
   Plus,
   Power,
   Trash2,
 } from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
+import { createEuclidOperatorConfig } from '../../core/state/presets';
+import { euclidPattern } from '../../core/time/operators';
 import type { DrawnCurveData } from '../../core/math/curves';
 import { buildDefaultParams } from '../../core/registry/types';
 import type {
@@ -231,9 +232,31 @@ function applyRhythmPreset(
         },
       };
     }
+    if (op.moduleId === 'time-euclid') {
+      // Classic presets are built on the pulse interference.
+      return { ...op, bypassed: true };
+    }
     return op;
   });
 }
+
+const EUCLID_TEMPLATES: ReadonlyArray<{
+  label: string;
+  steps: number;
+  hits: number;
+  rotation?: number;
+  description: string;
+}> = [
+  { label: 'Tresillo 3/8', steps: 8, hits: 3, description: 'x..x..x. – Basis von Reggaeton, Dembow & vielen Techno-Basslines' },
+  { label: 'Cinquillo 5/8', steps: 8, hits: 5, description: 'x.xx.xx. – kubanischer Puls, treibend' },
+  { label: 'Bossa 5/16', steps: 16, hits: 5, description: 'Weit verteilte, schwebende Akzente' },
+  { label: 'Samba 7/16', steps: 16, hits: 7, description: 'Lebendige, verschachtelte Sechzehntel' },
+  { label: 'Roll 9/16', steps: 16, hits: 9, description: 'Dichter, rollender Hi-Hat-Teppich' },
+  { label: 'Dicht 13/16', steps: 16, hits: 13, description: 'Fast durchgehend mit wenigen Lücken' },
+  { label: 'Triole 4/12', steps: 12, hits: 4, description: 'Triolischer Viertelpuls' },
+  { label: 'Aksak 4/9', steps: 9, hits: 4, description: 'Hinkender 2-2-2-3-Rhythmus (Balkan)' },
+  { label: 'Rätsel 5/13', steps: 13, hits: 5, description: 'Ungerades Raster – erzeugt lange Phasenrätsel' },
+];
 
 export function LayerInspector({
   layer,
@@ -265,8 +288,6 @@ export function LayerInspector({
   const [addCardModuleId, setAddCardModuleId] = useState<string>(
     processors[0]?.id ?? 'card-tone-filter',
   );
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const secEnabled = Boolean(layer?.secondaryVoice?.enabled);
   const [secExpanded, setSecExpanded] = useState<boolean>(secEnabled);
 
@@ -408,6 +429,78 @@ export function LayerInspector({
         ),
       }),
       `Zeit-Parameter: ${paramId}`,
+    );
+  };
+
+  const applyEuclidTemplate = (opId: string, t: (typeof EUCLID_TEMPLATES)[number]) => {
+    onCommitLayerImmediate(
+      layer.id,
+      (l) => ({
+        ...l,
+        timeOperators: l.timeOperators.map((op) =>
+          op.id === opId
+            ? {
+                ...op,
+                bypassed: false,
+                params: {
+                  ...op.params,
+                  euclidSteps: t.steps,
+                  euclidHits: t.hits,
+                  euclidRotation: t.rotation ?? 0,
+                },
+              }
+            : op,
+        ),
+      }),
+      `Euklid-Vorlage: ${t.label}`,
+    );
+  };
+
+  const renderEuclidExtras = (op: OperatorConfig) => {
+    const steps = op.params.euclidSteps ?? 16;
+    const hits = op.params.euclidHits ?? 5;
+    const rotation = op.params.euclidRotation ?? 0;
+    const pattern = euclidPattern(steps, hits, rotation);
+    const isMask = Math.round(op.params.euclidMode ?? 0) === 1;
+    const interferenceOn = layer.timeOperators.some(
+      (o) => o.moduleId === 'time-pulse-interference' && !o.bypassed,
+    );
+    return (
+      <>
+        <div className="euclid-pattern" title={`${Math.min(hits, steps)} Schläge auf ${steps} Steps`}>
+          {pattern.map((on, i) => (
+            <span
+              key={i}
+              className={`euclid-cell${on ? ' is-hit' : ''}`}
+              style={on ? { background: layer.color } : undefined}
+            />
+          ))}
+        </div>
+        <div className="preset-chips">
+          {EUCLID_TEMPLATES.map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              className={`preset-chip${t.steps === steps && t.hits === hits ? ' is-active' : ''}`}
+              title={t.description}
+              onClick={() => applyEuclidTemplate(op.id, t)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {!op.bypassed && (
+          <div className="muted-note">
+            {isMask
+              ? interferenceOn
+                ? 'Maske: nur Pulse der Puls-Interferenz, die auf einen Schlag fallen, kommen durch (am besten Puls-Welle A = Steps).'
+                : 'Maske ohne aktive Puls-Interferenz: der Operator erzeugt den Puls selbst.'
+              : interferenceOn
+                ? 'Eigener Puls: ersetzt den Rhythmus der Puls-Interferenz (Beschleunigung & Gravitation wirken weiter).'
+                : 'Eigener Puls: dieser Operator bestimmt den Rhythmus des Layers.'}
+          </div>
+        )}
+      </>
     );
   };
 
@@ -638,9 +731,30 @@ export function LayerInspector({
                       onOpenModTarget={onSetActiveModTarget}
                     />
                   ))}
+                  {op.moduleId === 'time-euclid' && renderEuclidExtras(op)}
                 </div>
               );
             })}
+
+            {!layer.timeOperators.some((op) => op.moduleId === 'time-euclid') && (
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={() =>
+                  onCommitLayerImmediate(
+                    layer.id,
+                    (l) => ({
+                      ...l,
+                      timeOperators: [...l.timeOperators, createEuclidOperatorConfig(l.id)],
+                    }),
+                    'Euklidischer Rhythmus hinzugefügt',
+                  )
+                }
+                title="k Schläge gleichmäßig auf n Steps verteilen (Tresillo, Clave, Bossa …)"
+              >
+                <Plus size={12} /> Euklidischer Rhythmus
+              </button>
+            )}
           </div>
         </div>
 
@@ -806,7 +920,7 @@ export function LayerInspector({
             </div>
 
             <div className="muted-note" style={{ fontWeight: 600 }}>
-              Klang- & Effekt-Kette (Ziehen oder Pfeile zum Umsortieren):
+              Klang- & Effekt-Kette (Pfeile zum Umsortieren):
             </div>
 
             {layer.processorChain.map((card, idx) => {
@@ -815,44 +929,10 @@ export function LayerInspector({
               return (
                 <div
                   key={card.id}
-                  draggable
-                  onDragStart={(e) => {
-                    setDragIndex(idx);
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', String(idx));
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    if (dragOverIndex !== idx) setDragOverIndex(idx);
-                  }}
-                  onDragLeave={() => {
-                    if (dragOverIndex === idx) setDragOverIndex(null);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const from =
-                      dragIndex ??
-                      Number(e.dataTransfer.getData('text/plain'));
-                    setDragIndex(null);
-                    setDragOverIndex(null);
-                    if (Number.isInteger(from) && from !== idx) {
-                      onReorderProcessorCards(layer.id, from, idx);
-                    }
-                  }}
-                  onDragEnd={() => {
-                    setDragIndex(null);
-                    setDragOverIndex(null);
-                  }}
-                  className={`sub-card${card.bypassed ? ' is-bypassed' : ''}${
-                    dragIndex === idx ? ' is-dragging' : ''
-                  }${dragOverIndex === idx && dragIndex !== idx ? ' is-drag-over' : ''}`}
+                  className={`sub-card${card.bypassed ? ' is-bypassed' : ''}`}
                 >
                   <div className="sub-card-head">
                     <span className="sub-card-title" title={mod.description}>
-                      <span className="drag-handle" title="Ziehen zum Sortieren">
-                        <GripVertical size={13} />
-                      </span>
                       {mod.displayName}
                     </span>
                     <div style={{ display: 'flex', gap: 3 }}>

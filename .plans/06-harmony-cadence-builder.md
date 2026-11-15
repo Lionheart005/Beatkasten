@@ -1,6 +1,6 @@
 # Erweiterungsplan: Dur, Jazz-Akkorde, Stufen-Baukasten & Stimmführung (Voice Leading)
 
-> **Status**: Geplant (noch nicht umgesetzt). Umsetzung erfolgt nach Freigabe über `/delegate`.
+> **Status**: ✅ Umgesetzt am 15.11.2026 (siehe [`08-feedback-runde-2.md`](./08-feedback-runde-2.md)). Abweichungen: Kadenz-Presets als `steps` mit `degree/accidental/chordType/bars`; `chordType: 'auto'` nutzt die globale Akkord-Farbe (Dreiklang/Septakkord/9er); Akkord-Skala für Melodie-Voices; `minor13` wird auf 6 Stimmen reduziert (Quinte fällt weg).
 
 ## 1. Ziele & Überblick
 1. **Vollständiges Skalen- & Akkord-Spektrum**: Klassisches Dur (Ionisch) sowie weitere Kirchentonarten (`Lydisch`, `Mixolydisch`) und Skalen (`Melodisch Moll`, `Dur-Pentatonik`), ergänzt um Akkorde von reinen Dreiklängen (`Dur`, `Moll`, `Vermindert`, `Übermäßig`, `Sus2`, `Sus4`) über Vierklänge (`Maj7`, `Dom7`, `Moll7`, `m7b5`, `6`, `add9`) bis hin zu Jazz-Erweiterungen (`9`, `11`, `13`).

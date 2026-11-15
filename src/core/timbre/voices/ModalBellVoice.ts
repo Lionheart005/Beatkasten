@@ -15,17 +15,24 @@ import {
 import { midiToFreq } from '../../theory';
 
 const TWO_PI = Math.PI * 2;
-const NUM_SLOTS = 6;
+const NUM_SLOTS = 8;
+// A slot is released once its fundamental fell below -80 dB (was -120 dB, which
+// kept every slot busy for ~8 s and forced audible voice stealing).
+const SLOT_RELEASE_LEVEL = 1e-4;
+const MAX_BELL_MIDI = 96;
 const NUM_PARTIALS = 4;
 const SCALE_BUF_CAP = 24;
 
-// Modal partial frequency ratios: woody (marimba) -> glassy (vibraphone) -> crystalline bell
-const WOODY_RATIOS = new Float64Array([1.0, 2.0, 3.98, 5.95]);
-const GLASSY_RATIOS = new Float64Array([1.0, 2.756, 5.404, 8.93]);
-const BELL_RATIOS = new Float64Array([1.0, 2.0, 2.756, 4.07]);
+// Modal partial frequency ratios: woody (tuned marimba) -> glassy (vibraphone,
+// near-harmonic) -> crystalline glockenspiel bar (real free-bar ratios 1 : 2.76 : 5.40).
+const WOODY_RATIOS = new Float64Array([1.0, 2.0, 3.99, 9.2]);
+const GLASSY_RATIOS = new Float64Array([1.0, 2.0, 4.0, 6.0]);
+const BELL_RATIOS = new Float64Array([1.0, 2.0, 2.76, 5.4]);
 
 // Alternating stereo pan positions across slots in [-0.35..+0.35]
-const SLOT_PAN_POSITIONS = new Float64Array([-0.35, 0.35, -0.24, 0.24, -0.14, 0.14]);
+const SLOT_PAN_POSITIONS = new Float64Array([
+  -0.35, 0.35, -0.24, 0.24, -0.14, 0.14, -0.05, 0.05,
+]);
 const SPRUNG_DEGREES = new Int32Array([0, 4, 2, 5, 1, 6, 3, 4]);
 const DUET_DEGREES = new Int32Array([0, 2, 4, 2, 0, 3, 4, 1]);
 
@@ -310,7 +317,9 @@ export class ModalBellVoice implements VoiceInstance {
     velocity: number,
     hardness: number,
   ): void {
-    const safeMidi = clamp(midiNote, 24, 108);
+    let safeMidi = clamp(midiNote, 24, 108);
+    // Keep bells out of the piercing top register (partials would reach > 10 kHz).
+    while (safeMidi > MAX_BELL_MIDI) safeMidi -= 12;
     const hz = clamp(midiToFreq(safeMidi), 32, this.sampleRate * 0.42);
     const baseIdx = slot * NUM_PARTIALS;
 
@@ -318,7 +327,8 @@ export class ModalBellVoice implements VoiceInstance {
     this.slotBaseHz[slot] = hz;
     this.slotAttack[slot] = 0;
     this.slotChirpPhase[slot] = 0;
-    this.slotChirpEnv[slot] = velocity * (0.14 + 0.36 * hardness);
+    // Short, quiet strike click (was up to 0.5 full-scale sine sweep -> harsh).
+    this.slotChirpEnv[slot] = velocity * (0.025 + 0.07 * hardness);
 
     for (let p = 0; p < NUM_PARTIALS; p++) {
       this.partialPhaseL[baseIdx + p] = 0;
@@ -351,10 +361,11 @@ export class ModalBellVoice implements VoiceInstance {
     }
 
     // 2. Partial relative amplitudes
-    this.partialGains[0] = 0.58;
-    this.partialGains[1] = 0.22 + 0.14 * material;
-    this.partialGains[2] = 0.08 + 0.16 * material + 0.08 * hardness;
-    this.partialGains[3] = 0.03 + 0.12 * material + 0.09 * hardness;
+    // Sum stays <= ~1.0 so overlapping notes keep headroom.
+    this.partialGains[0] = 0.62;
+    this.partialGains[1] = 0.16 + 0.08 * material;
+    this.partialGains[2] = 0.06 + 0.1 * material + 0.05 * hardness;
+    this.partialGains[3] = 0.02 + 0.05 * material + 0.06 * hardness;
 
     // 3. Exponential decay coefficients: higher partials decay progressively faster
     const sr = this.sampleRate;
@@ -555,7 +566,7 @@ export class ModalBellVoice implements VoiceInstance {
       const d2 = this.partialDecayCoeffs[2]!;
       const d3 = this.partialDecayCoeffs[3]!;
 
-      const malletNoiseGain = 0.28 * hardness;
+      const malletNoiseGain = 0.1 * hardness;
       const malletNoiseCoeff = this.malletNoiseCoeff;
       let malletEnv = this.malletNoiseEnv;
 
@@ -654,10 +665,10 @@ export class ModalBellVoice implements VoiceInstance {
           e1 *= d1;
           e2 *= d2;
           e3 *= d3;
-          if (e0 < 1e-6) e0 = 0;
-          if (e1 < 1e-6) e1 = 0;
-          if (e2 < 1e-6) e2 = 0;
-          if (e3 < 1e-6) e3 = 0;
+          if (e0 < SLOT_RELEASE_LEVEL) e0 = 0;
+          if (e1 < SLOT_RELEASE_LEVEL) e1 = 0;
+          if (e2 < SLOT_RELEASE_LEVEL) e2 = 0;
+          if (e3 < SLOT_RELEASE_LEVEL) e3 = 0;
 
           this.partialEnv[idx] = e0;
           this.partialEnv[idx + 1] = e1;
@@ -681,7 +692,7 @@ export class ModalBellVoice implements VoiceInstance {
           const panWeight = 0.25 + 0.75 * shimmer;
           const panCos = 0.70710678 + panWeight * (this.slotPanCos[s]! - 0.70710678);
           const panSin = 0.70710678 + panWeight * (this.slotPanSin[s]! - 0.70710678);
-          const voiceGain = atk * 0.42;
+          const voiceGain = atk * 0.3;
           sumL += sigL * panCos * voiceGain;
           sumR += sigR * panSin * voiceGain;
         }
@@ -693,8 +704,9 @@ export class ModalBellVoice implements VoiceInstance {
           if (malletEnv < 1e-6) malletEnv = 0;
         }
 
-        const satL = fastTanh(sumL * 0.92);
-        const satR = fastTanh(sumR * 0.92);
+        // Gentle safety limiter only (linear below ~0.5); no audible drive.
+        const satL = fastTanh(sumL);
+        const satR = fastTanh(sumR);
         this.dcBlocker.process(satL, satR);
 
         const yL = this.dcBlocker.outL;

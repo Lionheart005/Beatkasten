@@ -35,7 +35,12 @@ interface FsDirectoryHandle {
     options?: { create?: boolean },
   ): Promise<FsFileHandle>;
   values(): AsyncIterable<FsDirectoryHandle | FsFileHandle>;
+  removeEntry?(name: string, options?: { recursive?: boolean }): Promise<void>;
+  queryPermission?(options?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>;
+  requestPermission?(options?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>;
 }
+
+export type FsDirectoryHandleLike = FsDirectoryHandle;
 
 interface WindowWithFsPicker {
   showDirectoryPicker?: (options?: {
@@ -52,7 +57,8 @@ interface ProjectManifestJson {
   readonly activeHistoryNodeId: string;
 }
 
-const PROJECTS_ROOT_DIR = 'Projekte';
+/** Legacy sub folder: older builds always created `<picked folder>/Projekte/`. */
+const LEGACY_PROJECTS_DIR = 'Projekte';
 
 async function ensureDir(
   parent: FsDirectoryHandle,
@@ -110,13 +116,62 @@ async function readJsonFile<T>(
   }
 }
 
+async function hasProjectSubfolders(dir: FsDirectoryHandle): Promise<boolean> {
+  for await (const entry of dir.values()) {
+    if (entry.kind !== 'directory') continue;
+    if (await readJsonFile<ProjectManifestJson>(entry, 'project.json')) return true;
+  }
+  return false;
+}
+
+async function removeStaleJsonFiles(
+  dir: FsDirectoryHandle,
+  keep: ReadonlySet<string>,
+): Promise<void> {
+  if (!dir.removeEntry) return;
+  const stale: string[] = [];
+  for await (const entry of dir.values()) {
+    if (entry.kind === 'file' && entry.name.endsWith('.json') && !keep.has(entry.name)) {
+      stale.push(entry.name);
+    }
+  }
+  for (const name of stale) {
+    try {
+      await dir.removeEntry(name);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function copyDirectory(from: FsDirectoryHandle, to: FsDirectoryHandle): Promise<void> {
+  for await (const entry of from.values()) {
+    if (entry.kind === 'file') {
+      const file = await entry.getFile();
+      const target = await to.getFileHandle(entry.name, { create: true });
+      const writable = await target.createWritable();
+      await writable.write(new Uint8Array(await file.arrayBuffer()));
+      await writable.close();
+    } else {
+      await copyDirectory(entry, await ensureDir(to, entry.name));
+    }
+  }
+}
+
 /**
- * Browser File System Access API adapter writing human-readable project folders:
- * `Projekte/<Name>/project.json`, `history.json`, `sections/*.json`, `curves/*.json`, `exports/*.wav`.
+ * Browser File System Access API adapter writing human-readable project folders.
+ * The folder the user picks IS the projects folder:
+ * `<Ordner>/<Projektname>/project.json`, `history.json`, `sections/*.json`,
+ * `curves/*.json`, `exports/*.wav`. (A legacy `<Ordner>/Projekte/` sub folder
+ * from older builds is still used if it already contains projects.)
  */
 export class BrowserFsAdapter implements ProjectStorageAdapter {
   readonly kind = 'filesystem' as const;
   private rootDir: FsDirectoryHandle | null = null;
+  private projectsDirCache: FsDirectoryHandle | null = null;
+  private usesLegacySubfolder = false;
+  /** project id -> folder name, so renames move the folder instead of duplicating it. */
+  private readonly dirNameById = new Map<string, string>();
 
   isSupported(): boolean {
     if (typeof window === 'undefined') return false;
@@ -130,6 +185,35 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
 
   setRootDirectory(handle: FsDirectoryHandle | null): void {
     this.rootDir = handle;
+    this.projectsDirCache = null;
+    this.dirNameById.clear();
+  }
+
+  getRootDirectory(): FsDirectoryHandle | null {
+    return this.rootDir;
+  }
+
+  /** Human-readable location of a project folder, e.g. "Musik/Cooler_Beat". */
+  describeProjectLocation(projectName: string, projectId?: string): string {
+    const root = this.rootDir?.name ?? '?';
+    const folder =
+      (projectId ? this.dirNameById.get(projectId) : undefined) ??
+      sanitizeStorageName(projectName, projectId);
+    return `${root}/${this.usesLegacySubfolder ? `${LEGACY_PROJECTS_DIR}/` : ''}${folder}`;
+  }
+
+  private async getProjectsDir(): Promise<FsDirectoryHandle> {
+    if (this.projectsDirCache) return this.projectsDirCache;
+    const root = await this.requireRootDirectory();
+    const legacy = await tryGetDir(root, LEGACY_PROJECTS_DIR);
+    if (legacy && (await hasProjectSubfolders(legacy))) {
+      this.usesLegacySubfolder = true;
+      this.projectsDirCache = legacy;
+    } else {
+      this.usesLegacySubfolder = false;
+      this.projectsDirCache = root;
+    }
+    return this.projectsDirCache;
   }
 
   async pickRootDirectory(): Promise<FsDirectoryHandle> {
@@ -141,7 +225,7 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
       throw new Error('showDirectoryPicker wird von diesem Browser nicht unterstützt.');
     }
     const dir = await picker({ mode: 'readwrite' });
-    this.rootDir = dir;
+    this.setRootDirectory(dir);
     return dir;
   }
 
@@ -151,30 +235,30 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
   }
 
   async listProjects(): Promise<ProjectSummary[]> {
-    const root = await this.requireRootDirectory();
-    const projectsDir = await tryGetDir(root, PROJECTS_ROOT_DIR);
-    if (!projectsDir) return [];
+    const projectsDir = await this.getProjectsDir();
 
-    const summaries: ProjectSummary[] = [];
+    // Deduplicate by project id (older builds wrote one folder per rename).
+    const byId = new Map<string, ProjectSummary>();
     for await (const entry of projectsDir.values()) {
       if (entry.kind !== 'directory') continue;
       const manifest = await readJsonFile<ProjectManifestJson>(entry, 'project.json');
-      if (manifest) {
-        summaries.push({
+      if (!manifest) continue;
+      const prev = byId.get(manifest.id);
+      if (!prev || manifest.updatedAt > prev.updatedAt) {
+        byId.set(manifest.id, {
           id: manifest.id,
           name: manifest.name,
           updatedAt: manifest.updatedAt,
         });
+        this.dirNameById.set(manifest.id, entry.name);
       }
     }
 
-    return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
+    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   async loadProject(projectIdOrName: string): Promise<ProjectDocument | null> {
-    const root = await this.requireRootDirectory();
-    const projectsDir = await tryGetDir(root, PROJECTS_ROOT_DIR);
-    if (!projectsDir) return null;
+    const projectsDir = await this.getProjectsDir();
 
     const targetSafe = sanitizeStorageName(projectIdOrName);
     let matchedDir: FsDirectoryHandle | null = null;
@@ -189,13 +273,16 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
         manifest.name === projectIdOrName ||
         entry.name === targetSafe
       ) {
-        matchedDir = entry;
-        matchedManifest = manifest;
-        break;
+        // Prefer the newest folder when duplicates exist.
+        if (!matchedManifest || manifest.updatedAt > matchedManifest.updatedAt) {
+          matchedDir = entry;
+          matchedManifest = manifest;
+        }
       }
     }
 
     if (!matchedDir || !matchedManifest) return null;
+    this.dirNameById.set(matchedManifest.id, matchedDir.name);
 
     const historyNodes =
       (await readJsonFile<HistoryNode[]>(matchedDir, 'history.json')) ?? [];
@@ -203,17 +290,24 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
     const sections: SectionItem[] = [];
     const sectionsDir = await tryGetDir(matchedDir, 'sections');
     if (sectionsDir) {
+      const loaded: Array<{ file: string; section: SectionItem }> = [];
       for await (const entry of sectionsDir.values()) {
         if (entry.kind !== 'file' || !entry.name.endsWith('.json')) continue;
         const file = await entry.getFile();
         try {
-          const parsed = JSON.parse(await file.text()) as SectionItem;
-          sections.push(parsed);
+          loaded.push({ file: entry.name, section: JSON.parse(await file.text()) as SectionItem });
         } catch {
           // Ignore malformed section files
         }
       }
-      sections.sort((a, b) => a.name.localeCompare(b.name));
+      // File names carry an order prefix ("01_…"), so this keeps the user's order.
+      loaded.sort((a, b) => a.file.localeCompare(b.file));
+      const seenIds = new Set<string>();
+      for (const item of loaded) {
+        if (seenIds.has(item.section.id)) continue;
+        seenIds.add(item.section.id);
+        sections.push(item.section);
+      }
     }
 
     return {
@@ -229,12 +323,10 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
   }
 
   async saveProject(project: ProjectDocument): Promise<void> {
-    const root = await this.requireRootDirectory();
-    const projectsDir = await ensureDir(root, PROJECTS_ROOT_DIR);
-    const projectDir = await ensureDir(
-      projectsDir,
-      sanitizeStorageName(project.name, project.id),
-    );
+    const projectsDir = await this.getProjectsDir();
+    const dirName = sanitizeStorageName(project.name, project.id);
+    const previousDirName = this.dirNameById.get(project.id);
+    const projectDir = await ensureDir(projectsDir, dirName);
 
     const manifest: ProjectManifestJson = {
       id: project.id,
@@ -253,18 +345,70 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
     );
 
     const sectionsDir = await ensureDir(projectDir, 'sections');
-    for (const section of project.sections) {
-      const sectionFile = `${sanitizeStorageName(section.name, section.id)}.json`;
-      await writeTextFile(sectionsDir, sectionFile, JSON.stringify(section, null, 2));
+    const sectionFiles = new Set<string>();
+    project.sections.forEach((section, idx) => {
+      // Index prefix keeps the order and makes duplicate names unique.
+      sectionFiles.add(
+        `${String(idx + 1).padStart(2, '0')}_${sanitizeStorageName(section.name, section.id)}.json`,
+      );
+    });
+    const sectionFileList = [...sectionFiles];
+    for (let i = 0; i < project.sections.length; i++) {
+      await writeTextFile(
+        sectionsDir,
+        sectionFileList[i]!,
+        JSON.stringify(project.sections[i], null, 2),
+      );
     }
+    // Deleted / renamed sections must not come back on the next load.
+    await removeStaleJsonFiles(sectionsDir, sectionFiles);
 
     if (project.activeSnapshot.curves.length > 0) {
       const curvesDir = await ensureDir(projectDir, 'curves');
+      const curveFiles = new Set<string>();
       for (const curve of project.activeSnapshot.curves) {
         const curveFile = `${sanitizeStorageName(curve.name || curve.id, curve.id)}.json`;
+        curveFiles.add(curveFile);
         await writeTextFile(curvesDir, curveFile, JSON.stringify(curve, null, 2));
       }
+      await removeStaleJsonFiles(curvesDir, curveFiles);
     }
+
+    this.dirNameById.set(project.id, dirName);
+
+    // Renamed project: move instead of leaving a duplicate folder behind.
+    if (previousDirName && previousDirName !== dirName && projectsDir.removeEntry) {
+      const oldDir = await tryGetDir(projectsDir, previousDirName);
+      const oldManifest = oldDir
+        ? await readJsonFile<ProjectManifestJson>(oldDir, 'project.json')
+        : null;
+      if (oldDir && oldManifest?.id === project.id) {
+        // Carry exports over before removing the old folder.
+        const oldExports = await tryGetDir(oldDir, 'exports');
+        if (oldExports) await copyDirectory(oldExports, await ensureDir(projectDir, 'exports'));
+        try {
+          await projectsDir.removeEntry(previousDirName, { recursive: true });
+        } catch {
+          // keep old folder if it cannot be removed
+        }
+      }
+    }
+  }
+
+  /** Re-requests write permission for a remembered folder (needs a user gesture). */
+  async ensurePermission(handle: FsDirectoryHandle, request: boolean): Promise<boolean> {
+    const opts = { mode: 'readwrite' as const };
+    try {
+      if (handle.queryPermission && (await handle.queryPermission(opts)) === 'granted') {
+        return true;
+      }
+      if (request && handle.requestPermission) {
+        return (await handle.requestPermission(opts)) === 'granted';
+      }
+    } catch {
+      return false;
+    }
+    return false;
   }
 
   async saveExportedAudio(
@@ -273,8 +417,7 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
     bytes: Uint8Array,
     subFolder?: string,
   ): Promise<void> {
-    const root = await this.requireRootDirectory();
-    const projectsDir = await ensureDir(root, PROJECTS_ROOT_DIR);
+    const projectsDir = await this.getProjectsDir();
     const projectDir = await ensureDir(projectsDir, sanitizeStorageName(projectName));
     const exportsDir = await ensureDir(projectDir, 'exports');
 
@@ -286,8 +429,7 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
   }
 
   async saveCurvePreset(projectName: string, curve: DrawnCurveData): Promise<void> {
-    const root = await this.requireRootDirectory();
-    const projectsDir = await ensureDir(root, PROJECTS_ROOT_DIR);
+    const projectsDir = await this.getProjectsDir();
     const projectDir = await ensureDir(projectsDir, sanitizeStorageName(projectName));
     const curvesDir = await ensureDir(projectDir, 'curves');
     const curveFile = `${sanitizeStorageName(curve.name || curve.id, curve.id)}.json`;

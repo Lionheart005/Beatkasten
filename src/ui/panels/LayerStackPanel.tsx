@@ -1,7 +1,18 @@
 import { useState, type CSSProperties } from 'react';
-import { Copy, Layers, Plus, Trash2 } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FolderTree,
+  Layers,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
 import type { LayerConfig } from '../../core/state/types';
+import { buildLayerBlocks, listLayerGroups } from '../store/layerGroups';
 import type { ActiveModTarget } from '../store/useStudioStore';
 
 interface LayerStackPanelProps {
@@ -24,7 +35,13 @@ interface LayerStackPanelProps {
     updater: (layer: LayerConfig) => LayerConfig,
     label: string,
   ) => void;
+  onMoveLayer: (layerId: string, direction: -1 | 1, wholeGroup?: boolean) => void;
+  onSetLayerGroup: (layerId: string, group: string) => void;
+  onRenameGroup: (oldName: string, newName: string) => void;
+  onToggleGroupFlag: (group: string, flag: 'muted' | 'solo' | 'enabled') => void;
 }
+
+const NEW_GROUP_VALUE = '__new_group__';
 
 export function LayerStackPanel({
   layers,
@@ -38,24 +55,42 @@ export function LayerStackPanel({
   onDeleteLayer,
   onUpdateLayerLive,
   onCommitLayerImmediate,
+  onMoveLayer,
+  onSetLayerGroup,
+  onRenameGroup,
+  onToggleGroupFlag,
 }: LayerStackPanelProps) {
   const voices = defaultRegistry.listVoices();
   const [newVoiceId, setNewVoiceId] = useState<string>(
     voices[0]?.id ?? 'pulse-texture',
   );
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const groupNames = listLayerGroups(layers);
+  const blocks = buildLayerBlocks(layers);
 
-  return (
-    <aside className="dock-panel">
-      <div className="panel-header">
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Layers size={14} color="#38bdf8" />
-          Layer-Stack ({layers.length})
-        </span>
-      </div>
+  const toggleCollapsed = (g: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g);
+      else next.add(g);
+      return next;
+    });
 
-      <div className="panel-scroll">
-        {layers.map((layer) => {
-          const isSelected = layer.id === selectedLayerId;
+  const handleGroupSelect = (layer: LayerConfig, value: string) => {
+    if (value === NEW_GROUP_VALUE) {
+      const name = window.prompt('Name der neuen Gruppe (z. B. Drums, Bass, Flächen):', '');
+      if (name && name.trim()) onSetLayerGroup(layer.id, name.trim());
+      return;
+    }
+    onSetLayerGroup(layer.id, value);
+  };
+
+  const renderLayerCard = (layer: LayerConfig) => {
+    const isSelected = layer.id === selectedLayerId;
           const voiceMod = defaultRegistry.getVoice(layer.voice.moduleId);
           const cycleBadge = `${layer.cycleLength.value} ${
             layer.cycleLength.unit === 'bars'
@@ -138,6 +173,22 @@ export function LayerStackPanel({
                   <button
                     type="button"
                     className="btn-ghost btn-sm"
+                    onClick={() => onMoveLayer(layer.id, -1)}
+                    title={layer.group ? 'Innerhalb der Gruppe nach oben' : 'Layer nach oben'}
+                  >
+                    <ArrowUp size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={() => onMoveLayer(layer.id, 1)}
+                    title={layer.group ? 'Innerhalb der Gruppe nach unten' : 'Layer nach unten'}
+                  >
+                    <ArrowDown size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
                     onClick={() => onDuplicateLayer(layer.id)}
                     title="Layer duplizieren"
                   >
@@ -156,6 +207,21 @@ export function LayerStackPanel({
 
               <div className="layer-sub">
                 <span>{voiceMod?.displayName ?? layer.voice.moduleId}</span>
+                <select
+                  className="layer-group-select"
+                  value={layer.group ?? ''}
+                  title="Gruppe zuordnen"
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleGroupSelect(layer, e.target.value)}
+                >
+                  <option value="">Keine Gruppe</option>
+                  {groupNames.map((g) => (
+                    <option key={g} value={g}>
+                      Gruppe: {g}
+                    </option>
+                  ))}
+                  <option value={NEW_GROUP_VALUE}>+ Neue Gruppe…</option>
+                </select>
                 <span
                   style={{
                     color: layer.color,
@@ -312,6 +378,107 @@ export function LayerStackPanel({
                   </>
                 );
               })()}
+            </div>
+          );
+  };
+
+  return (
+    <aside className="dock-panel">
+      <div className="panel-header">
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Layers size={14} color="#38bdf8" />
+          Layer-Stack ({layers.length})
+        </span>
+      </div>
+
+      <div className="panel-scroll">
+        {blocks.map((block) => {
+          if (block.kind === 'single') return renderLayerCard(block.layers[0]!);
+          const g = block.group!;
+          const collapsed = collapsedGroups.has(g);
+          const allMuted = block.layers.every((l) => l.muted);
+          const allSolo = block.layers.every((l) => l.solo);
+          const anySelected = block.layers.some((l) => l.id === selectedLayerId);
+          return (
+            <div key={`group:${g}`} className={`layer-group${anySelected ? ' has-selected' : ''}`}>
+              <div className="layer-group-head">
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  onClick={() => toggleCollapsed(g)}
+                  title={collapsed ? 'Gruppe aufklappen' : 'Gruppe einklappen'}
+                >
+                  {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                </button>
+                <FolderTree size={12} color="var(--text-muted)" />
+                {renamingGroup === g ? (
+                  <input
+                    type="text"
+                    autoFocus
+                    value={renameValue}
+                    style={{ flex: 1, minWidth: 0 }}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => {
+                      onRenameGroup(g, renameValue);
+                      setRenamingGroup(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') setRenamingGroup(null);
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="layer-group-name"
+                    title="Doppelklick zum Umbenennen"
+                    onDoubleClick={() => {
+                      setRenamingGroup(g);
+                      setRenameValue(g);
+                    }}
+                  >
+                    {g} <span className="muted-note">({block.layers.length})</span>
+                  </span>
+                )}
+                <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    title="Ganze Gruppe nach oben"
+                    onClick={() => onMoveLayer(block.layers[0]!.id, -1, true)}
+                  >
+                    <ArrowUp size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    title="Ganze Gruppe nach unten"
+                    onClick={() => onMoveLayer(block.layers[0]!.id, 1, true)}
+                  >
+                    <ArrowDown size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`pill-toggle${allMuted ? ' is-mute' : ''}`}
+                    title="Ganze Gruppe stummschalten"
+                    onClick={() => onToggleGroupFlag(g, 'muted')}
+                  >
+                    M
+                  </button>
+                  <button
+                    type="button"
+                    className={`pill-toggle${allSolo ? ' is-solo' : ''}`}
+                    title="Ganze Gruppe solo"
+                    onClick={() => onToggleGroupFlag(g, 'solo')}
+                  >
+                    S
+                  </button>
+                </div>
+              </div>
+              {!collapsed && (
+                <div className="layer-group-body">
+                  {block.layers.map((l) => renderLayerCard(l))}
+                </div>
+              )}
             </div>
           );
         })}

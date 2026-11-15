@@ -1,17 +1,26 @@
 import { useEffect, useRef } from 'react';
 import {
+  Check,
   Download,
   FolderCheck,
   FolderPlus,
   FolderOpen,
+  Music,
   Play,
   RotateCcw,
   Square,
 } from 'lucide-react';
 import type { LiveTelemetry } from '../../audio-host';
-import { CHORD_PRESETS, PROGRESSION_PRESETS } from '../../core/theory/harmony';
+import {
+  CHORD_CATEGORY_LABELS,
+  CHORD_PRESETS,
+  PROGRESSION_PRESETS,
+  type ChordCategory,
+} from '../../core/theory/harmony';
 import { NOTE_NAMES, SCALE_DEFINITIONS } from '../../core/theory/scales';
 import type { BeatSnapshot } from '../../core/state/types';
+import { formatSaveTime } from '../components/ProjectModal';
+import type { SaveState } from '../store/useStudioStore';
 
 interface TransportBarProps {
   projectName: string;
@@ -21,6 +30,10 @@ interface TransportBarProps {
   getTelemetry: () => LiveTelemetry;
   fsConnected: boolean;
   fsFolderName: string | null;
+  pendingFolderName: string | null;
+  saveState: SaveState;
+  harmonyBuilderOpen: boolean;
+  onToggleHarmonyBuilder: () => void;
   onTogglePlay: () => void;
   onRestart: () => void;
   onUpdateSnapshotLive: (
@@ -58,6 +71,10 @@ export function TransportBar({
   getTelemetry,
   fsConnected,
   fsFolderName,
+  pendingFolderName,
+  saveState,
+  harmonyBuilderOpen,
+  onToggleHarmonyBuilder,
   onTogglePlay,
   onRestart,
   onUpdateSnapshotLive,
@@ -208,15 +225,24 @@ export function TransportBar({
               );
             }}
           >
-            {Object.values(SCALE_DEFINITIONS).map((sc) => (
-              <option key={sc.id} value={sc.id}>
-                {sc.label}
-              </option>
+            {(['minor', 'major'] as const).map((family) => (
+              <optgroup key={family} label={family === 'minor' ? 'Moll & dunkle Modi' : 'Dur & helle Modi'}>
+                {Object.values(SCALE_DEFINITIONS)
+                  .filter((sc) => sc.family === family)
+                  .map((sc) => (
+                    <option key={sc.id} value={sc.id}>
+                      {sc.label}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </select>
         </div>
 
-        <div className="field-chip" title="Akkord-Färbung für Harmonie-Layer">
+        <div
+          className="field-chip"
+          title="Akkord-Farbe: bei leitereigenen Kadenzen bestimmt sie, ob Dreiklänge, Septakkorde oder 9er-Akkorde gebildet werden"
+        >
           <label>Akkord</label>
           <select
             value={snapshot.harmony.chordPreset}
@@ -231,10 +257,16 @@ export function TransportBar({
               );
             }}
           >
-            {Object.values(CHORD_PRESETS).map((ch) => (
-              <option key={ch.id} value={ch.id}>
-                {ch.label}
-              </option>
+            {(Object.keys(CHORD_CATEGORY_LABELS) as ChordCategory[]).map((cat) => (
+              <optgroup key={cat} label={CHORD_CATEGORY_LABELS[cat]}>
+                {Object.values(CHORD_PRESETS)
+                  .filter((ch) => ch.category === cat)
+                  .map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.label}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -242,24 +274,68 @@ export function TransportBar({
         <div className="field-chip" title="Harmonische Bewegung über mehrere Takte">
           <label>Folge</label>
           <select
-            value={snapshot.harmony.progressionId}
+            value={
+              snapshot.harmony.progressionMode === 'custom'
+                ? '__custom__'
+                : snapshot.harmony.progressionId
+            }
             onChange={(e) => {
-              const progressionId = e.target.value;
+              const value = e.target.value;
+              if (value === '__custom__') {
+                onCommitSnapshotImmediate(
+                  (s) => ({ ...s, harmony: { ...s.harmony, progressionMode: 'custom' } }),
+                  'Eigene Akkordfolge aktiviert',
+                );
+                return;
+              }
               onCommitSnapshotImmediate(
                 (s) => ({
                   ...s,
-                  harmony: { ...s.harmony, progressionId },
+                  harmony: { ...s.harmony, progressionId: value, progressionMode: 'preset' },
                 }),
-                `Fortschreitung gewechselt`,
+                `Fortschreitung: ${PROGRESSION_PRESETS[value as keyof typeof PROGRESSION_PRESETS]?.label ?? value}`,
               );
             }}
           >
-            {Object.values(PROGRESSION_PRESETS).map((pr) => (
-              <option key={pr.id} value={pr.id}>
-                {pr.label}
-              </option>
-            ))}
+            <optgroup label="Techno-Parallel (Akkordtyp bleibt gleich)">
+              {Object.values(PROGRESSION_PRESETS)
+                .filter((pr) => pr.group === 'techno')
+                .map((pr) => (
+                  <option key={pr.id} value={pr.id}>
+                    {pr.label}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="Kadenzen (leitereigen)">
+              {Object.values(PROGRESSION_PRESETS)
+                .filter((pr) => pr.group === 'cadence')
+                .map((pr) => (
+                  <option key={pr.id} value={pr.id}>
+                    {pr.label}
+                  </option>
+                ))}
+            </optgroup>
+            {(snapshot.harmony.customSteps?.length ?? 0) > 0 && (
+              <optgroup label="Baukasten">
+                <option value="__custom__">
+                  Eigene Folge ({snapshot.harmony.customSteps?.length} Akkorde)
+                </option>
+              </optgroup>
+            )}
           </select>
+          <button
+            type="button"
+            className={`btn-sm${harmonyBuilderOpen ? ' is-active' : ''}`}
+            onClick={onToggleHarmonyBuilder}
+            title="Akkord-Baukasten ein-/ausklappen: eigene Kadenzen aus Stufen zusammenstellen"
+          >
+            <Music size={11} /> Baukasten {harmonyBuilderOpen ? '▲' : '▼'}
+            {snapshot.harmony.progressionMode === 'custom' && (
+              <span className="badge-current" style={{ marginLeft: 4 }}>
+                aktiv
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="field-chip" title="Master-Lautstärke & Analog-Glue">
@@ -345,25 +421,51 @@ export function TransportBar({
         <button
           type="button"
           onClick={onConnectFolder}
-          className={fsConnected ? 'btn-primary' : undefined}
+          className={fsConnected ? 'btn-primary' : pendingFolderName ? 'btn-attention' : undefined}
           title={
             fsConnected
-              ? `Verbunden mit „${fsFolderName}“`
-              : 'Lokalen Ordner für Projekte & Exports verbinden'
+              ? `Projekte-Ordner: „${fsFolderName}“ (jedes Projekt = ein Unterordner)`
+              : pendingFolderName
+                ? `Zugriff auf „${pendingFolderName}“ mit einem Klick erneuern`
+                : 'Lokalen Ordner für Projekte & Exports verbinden'
           }
         >
           {fsConnected ? <FolderCheck size={13} /> : <FolderPlus size={13} />}
-          <span>{fsConnected ? fsFolderName : 'Projekt-Ordner verbinden'}</span>
+          <span>
+            {fsConnected
+              ? fsFolderName
+              : pendingFolderName
+                ? `„${pendingFolderName}“ wieder verbinden`
+                : 'Projekt-Ordner verbinden'}
+          </span>
         </button>
 
         <button
           type="button"
           onClick={onOpenProjectModal}
-          title="Projekt speichern oder öffnen"
+          title={`Projekt „${projectName}“ umbenennen, kopieren oder anderes öffnen`}
         >
           <FolderOpen size={13} />
           <span>Projekt</span>
         </button>
+
+        <span
+          className={`save-chip is-${saveState.status}`}
+          title={
+            saveState.status === 'error'
+              ? `Fehler: ${saveState.location}`
+              : `Automatisches Speichern · ${saveState.location}`
+          }
+        >
+          {saveState.status === 'saved' && (
+            <>
+              <Check size={11} /> Gespeichert {formatSaveTime(saveState.at).slice(0, 5)}
+            </>
+          )}
+          {saveState.status === 'saving' && <>Speichert…</>}
+          {saveState.status === 'error' && <>⚠ Nicht gespeichert</>}
+          {saveState.status === 'idle' && <>Autosave an</>}
+        </span>
 
         <button
           type="button"

@@ -12,10 +12,15 @@ import type {
 } from './types';
 
 let presetIdCounter = 0;
+// Session-unique salt: IDs must never collide with IDs from previously saved
+// projects (the counter restarts at 0 on every page load).
+const ID_SESSION_SALT = `${Date.now().toString(36)}${Math.floor(Math.random() * 46656)
+  .toString(36)
+  .padStart(3, '0')}`;
 
 function nextId(prefix: string): string {
   presetIdCounter += 1;
-  return `${prefix}_${presetIdCounter.toString(36)}`;
+  return `${prefix}_${ID_SESSION_SALT}_${presetIdCounter.toString(36)}`;
 }
 
 function defaultVoiceParams(voiceModuleId: string): Record<string, number> {
@@ -121,7 +126,26 @@ function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
         waveShape: 0,
       },
     },
+    createEuclidOperatorConfig(prefix, true),
   ];
+}
+
+/** Euclidean rhythm operator config (bypassed by default for new layers). */
+export function createEuclidOperatorConfig(prefix: string, bypassed = false): OperatorConfig {
+  return {
+    id: `${prefix}_time_euclid`,
+    moduleId: 'time-euclid',
+    version: 1,
+    bypassed,
+    params: {
+      euclidSteps: 16,
+      euclidHits: 5,
+      euclidRotation: 0,
+      euclidGate: 0.5,
+      euclidAccent: 0.35,
+      euclidMode: 0,
+    },
+  };
 }
 
 function createDefaultProcessorChain(prefix: string): ProcessorCardConfig[] {

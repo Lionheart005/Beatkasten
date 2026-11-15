@@ -3,19 +3,17 @@ import { MasterBus } from '../dsp/masterBus';
 import { clamp, sanitizeSampleRate } from '../dsp/smoothing';
 import { ModulationRouter } from '../modulation/ModulationRouter';
 import { ModuleRegistry } from '../registry/ModuleRegistry';
-import { type HarmonyFrame } from '../registry/types';
+import { type HarmonyFrame, type MutableHarmonyFrame } from '../registry/types';
 import { type BeatSnapshot } from '../state/types';
-import { computeCombinedCycleBeats, cycleToBeats } from '../theory/cycles';
-import {
-  computeHarmonyFrame,
-  PROGRESSION_PRESETS,
-  type ProgressionId,
-} from '../theory/harmony';
+import { computeSnapshotCycleBeats } from './cycleMath';
+import { buildHarmonyTimeline, type HarmonyTimeline } from '../theory/progression';
 import { LayerEngine } from './LayerEngine';
 import { MasterClock } from './MasterClock';
 
 const DEFAULT_MAX_BLOCK_SIZE = 4096;
 const CROSSFADE_SECONDS = 0.015; // ~15 ms click-free snapshot/section transition
+/** Max chunk length while a glide/crossfade chord transition is running. */
+const TRANSITION_CHUNK_SAMPLES = 256;
 
 export interface EngineTelemetry {
   layerPhases: Float32Array;
@@ -52,7 +50,10 @@ export class TechnoEngine {
   private readonly layerPulsesMap = new Map<string, number>();
 
   private snapshot: BeatSnapshot | null = null;
-  private harmonyFramesByStep: HarmonyFrame[] = [];
+  private harmonyTimeline: HarmonyTimeline;
+  private harmonyKey = '';
+  private harmonyCursor = 0;
+  private readonly liveHarmony: MutableHarmonyFrame;
   private isolatedLayerId: string | null = null;
 
   private crossfadeTotalSamples = 720;
@@ -93,7 +94,36 @@ export class TechnoEngine {
       currentBar: 0,
     };
 
-    this.rebuildHarmonyCache(9, 'natural_minor', 'minor7', 'static');
+    this.harmonyTimeline = buildHarmonyTimeline(
+      { rootNote: 9, scaleId: 'natural_minor', chordPreset: 'minor7', progressionId: 'static' },
+      4,
+    );
+    const first = this.harmonyTimeline.steps[0]!.frame;
+    this.liveHarmony = {
+      rootNote: first.rootNote,
+      rootMidi: first.rootMidi,
+      scaleId: first.scaleId,
+      chordPreset: first.chordPreset,
+      scaleNotesMidi: first.scaleNotesMidi,
+      chordNotesMidi: first.chordNotesMidi,
+      bassMidi: first.rootMidi,
+      nextChordNotesMidi: first.chordNotesMidi,
+      transitionType: 'cut',
+      transitionProgress: 0,
+      stepIndex: 0,
+    };
+  }
+
+  /** Current harmony timeline (for tests / UI previews). */
+  public getHarmonyTimeline(): HarmonyTimeline {
+    return this.harmonyTimeline;
+  }
+
+  /** Jumps the clock to an absolute beat position (used by offline pre-roll). */
+  public seekToBeat(beat: number): void {
+    this.clock.seekToBeat(beat);
+    this.telemetry.currentBeat = this.clock.beatPosition;
+    this.telemetry.currentBar = this.clock.barPosition;
   }
 
   public getSampleRate(): number {
@@ -178,12 +208,7 @@ export class TechnoEngine {
     );
 
     this.router.prepareSnapshot(snapshot);
-    this.rebuildHarmonyCache(
-      snapshot.harmony.rootNote,
-      snapshot.harmony.scaleId,
-      snapshot.harmony.chordPreset,
-      snapshot.harmony.progressionId,
-    );
+    this.rebuildHarmonyCache(snapshot);
 
     // Sync LayerEngines while reusing instances by layer.id
     this.activeSlots.length = 0;
@@ -262,10 +287,93 @@ export class TechnoEngine {
 
     let processed = 0;
     while (processed < totalCount) {
-      const chunk = Math.min(this.maxBlockSize, totalCount - processed);
+      const chunk = Math.min(
+        this.maxBlockSize,
+        totalCount - processed,
+        this.samplesUntilHarmonyEvent(),
+      );
       this.renderChunk(snap, outL, outR, processed, chunk);
       processed += chunk;
     }
+  }
+
+  private locateHarmonyStep(pos: number): number {
+    const steps = this.harmonyTimeline.steps;
+    const n = steps.length;
+    let idx = this.harmonyCursor < n ? this.harmonyCursor : 0;
+    const cur = steps[idx]!;
+    if (pos >= cur.startBeat && pos < cur.endBeat) return idx;
+    const next = (idx + 1) % n;
+    const nxt = steps[next]!;
+    if (pos >= nxt.startBeat && pos < nxt.endBeat) {
+      this.harmonyCursor = next;
+      return next;
+    }
+    idx = n - 1;
+    for (let i = 0; i < n; i++) {
+      if (pos < steps[i]!.endBeat) {
+        idx = i;
+        break;
+      }
+    }
+    this.harmonyCursor = idx;
+    return idx;
+  }
+
+  private harmonyPosition(): number {
+    const total = this.harmonyTimeline.totalBeats;
+    const beat = this.clock.beatPosition;
+    return ((beat % total) + total) % total;
+  }
+
+  /** Samples until the next chord boundary (chunks never straddle a chord change). */
+  private samplesUntilHarmonyEvent(): number {
+    const steps = this.harmonyTimeline.steps;
+    if (steps.length <= 1) return this.maxBlockSize;
+    const pos = this.harmonyPosition();
+    const step = steps[this.locateHarmonyStep(pos)]!;
+    const beatsLeft = step.endBeat - pos;
+    if (
+      step.transitionType !== 'cut' &&
+      step.transitionBeats > 0 &&
+      beatsLeft <= step.transitionBeats
+    ) {
+      const toBoundary = Math.ceil(beatsLeft * this.clock.samplesPerBeat);
+      return Math.max(1, Math.min(TRANSITION_CHUNK_SAMPLES, toBoundary));
+    }
+    let toWindow = beatsLeft;
+    if (step.transitionType !== 'cut' && step.transitionBeats > 0) {
+      toWindow = beatsLeft - step.transitionBeats;
+    }
+    return Math.max(1, Math.ceil(toWindow * this.clock.samplesPerBeat));
+  }
+
+  private updateLiveHarmony(): HarmonyFrame {
+    const steps = this.harmonyTimeline.steps;
+    const pos = this.harmonyPosition();
+    const idx = this.locateHarmonyStep(pos);
+    const step = steps[idx]!;
+    const next = steps[(idx + 1) % steps.length]!;
+    const f = step.frame;
+    const lh = this.liveHarmony;
+    lh.rootNote = f.rootNote;
+    lh.rootMidi = f.rootMidi;
+    lh.bassMidi = f.rootMidi;
+    lh.scaleId = f.scaleId;
+    lh.chordPreset = f.chordPreset;
+    lh.scaleNotesMidi = f.scaleNotesMidi;
+    lh.chordNotesMidi = f.chordNotesMidi;
+    lh.nextChordNotesMidi = next.frame.chordNotesMidi;
+    lh.transitionType = step.transitionType;
+    lh.stepIndex = idx;
+    const tb = step.transitionBeats;
+    if (step.transitionType !== 'cut' && tb > 0 && steps.length > 1) {
+      const p = (pos - (step.endBeat - tb)) / tb;
+      lh.transitionProgress = p <= 0 ? 0 : p >= 1 ? 1 : p;
+    } else {
+      lh.transitionProgress = 0;
+    }
+    return lh;
   }
 
   private renderChunk(
@@ -281,12 +389,7 @@ export class TechnoEngine {
     const startBeat = this.clock.beatPosition;
     const tempoBpm = this.clock.tempoBpm;
     const beatsPerBar = this.clock.beatsPerBar;
-    const barIndex = Math.floor(this.clock.barPosition);
-
-    const frameCount = this.harmonyFramesByStep.length;
-    const stepIdx =
-      frameCount > 0 ? ((barIndex % frameCount) + frameCount) % frameCount : 0;
-    const harmony = this.harmonyFramesByStep[stepIdx]!;
+    const harmony = this.updateLiveHarmony();
 
     // Determine solo status across enabled, unmuted layers
     let anySolo = false;
@@ -379,84 +482,22 @@ export class TechnoEngine {
     this.telemetry.currentBar = this.clock.barPosition;
   }
 
-  private rebuildHarmonyCache(
-    rootNote: number,
-    scaleId: string,
-    chordPreset: string,
-    progressionId: string,
-  ): void {
-    const prog = Object.prototype.hasOwnProperty.call(
-      PROGRESSION_PRESETS,
-      progressionId,
-    )
-      ? PROGRESSION_PRESETS[progressionId as ProgressionId]
-      : PROGRESSION_PRESETS.static;
-    const stepCount = Math.max(1, prog.semitoneOffsets.length);
-    const frames: HarmonyFrame[] = [];
-    for (let s = 0; s < stepCount; s++) {
-      frames.push(
-        computeHarmonyFrame(rootNote, scaleId, chordPreset, progressionId, s),
-      );
-    }
-    this.harmonyFramesByStep = frames;
+  private rebuildHarmonyCache(snapshot: BeatSnapshot): void {
+    const bpb = this.clock.beatsPerBar;
+    // applySnapshot runs on every slider move: only re-solve when harmony changed.
+    const key = `${bpb}|${JSON.stringify(snapshot.harmony)}`;
+    if (key === this.harmonyKey) return;
+    this.harmonyKey = key;
+    this.harmonyTimeline = buildHarmonyTimeline(snapshot.harmony, bpb);
+    this.harmonyCursor = 0;
   }
 
   private computeCombinedCycle(snapshot: BeatSnapshot): number {
-    const beatsPerBar = this.clock.beatsPerBar;
-    let combined = 4;
-    let hasEnabled = false;
-
-    for (let i = 0; i < snapshot.layers.length; i++) {
-      const layer = snapshot.layers[i]!;
-      if (!layer.enabled) continue;
-
-      const layerBeats = cycleToBeats(
-        layer.cycleLength.value,
-        layer.cycleLength.unit,
-        beatsPerBar,
-      );
-      combined = hasEnabled
-        ? computeCombinedCycleBeats(combined, layerBeats)
-        : layerBeats;
-      hasEnabled = true;
-
-      for (let m = 0; m < layer.modulations.length; m++) {
-        const mod = layer.modulations[m]!;
-        if (!mod.enabled) continue;
-
-        if (mod.sourceType === 'wave-lfo' || mod.sourceType === 'macro-arc') {
-          const defaultVal = mod.sourceType === 'macro-arc' ? 8 : 4;
-          const defaultUnit = mod.sourceType === 'macro-arc' ? 'bars' : 'beats';
-          const modBeats = cycleToBeats(
-            mod.sourceConfig.cycleValue ?? defaultVal,
-            mod.sourceConfig.cycleUnit ?? defaultUnit,
-            beatsPerBar,
-          );
-          combined = computeCombinedCycleBeats(combined, modBeats);
-        } else if (mod.sourceType === 'drawn-curve') {
-          let cv: number | undefined;
-          let cu: typeof mod.sourceConfig.cycleUnit;
-          for (let c = 0; c < snapshot.curves.length; c++) {
-            const curve = snapshot.curves[c]!;
-            if (curve.id === mod.sourceConfig.curveId) {
-              cv = curve.cycleValue;
-              cu = curve.cycleUnit;
-              break;
-            }
-          }
-          cv = cv ?? mod.sourceConfig.cycleValue;
-          cu = cu ?? mod.sourceConfig.cycleUnit;
-          if (cv !== undefined && cu !== undefined) {
-            combined = computeCombinedCycleBeats(
-              combined,
-              cycleToBeats(cv, cu, beatsPerBar),
-            );
-          }
-        }
-      }
-    }
-
-    return combined;
+    return computeSnapshotCycleBeats(
+      snapshot,
+      this.clock.beatsPerBar,
+      this.harmonyTimeline.steps.length > 1 ? this.harmonyTimeline.totalBeats : 0,
+    );
   }
 
   private detectStructuralSwitch(

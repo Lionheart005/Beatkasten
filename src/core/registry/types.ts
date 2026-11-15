@@ -63,6 +63,13 @@ export interface TimeEvalContext {
   readonly cycleBeats: number;
   readonly beatsPerBar: number;
   readonly sampleRate: number;
+  /**
+   * Per-operator-slot scratch memory owned by the engine; persists between
+   * control sub-blocks (operators themselves are stateless and shared).
+   */
+  readonly slotState?: Float64Array;
+  /** True when an earlier operator in the chain already generates pulses. */
+  readonly hasPulseSource?: boolean;
 }
 
 export interface TimeFrame {
@@ -101,13 +108,41 @@ export interface TimeOperatorModule extends ModuleDescriptor {
   ): void;
 }
 
+export type ChordTransitionType = 'cut' | 'glide' | 'crossfade';
+
 export interface HarmonyFrame {
   readonly rootNote: number;
+  /** Bass-register root of the current chord (MIDI ~30..41). */
   readonly rootMidi: number;
   readonly scaleId: string;
   readonly chordPreset: string;
+  /** Chord-scale for melody voices (key scale with chord tones substituted). */
   readonly scaleNotesMidi: readonly number[];
+  /** Voiced chord notes (ascending); voice-led when enabled. */
   readonly chordNotesMidi: readonly number[];
+  readonly bassMidi?: number;
+  /** Voicing of the following chord (for glide / crossfade transitions). */
+  readonly nextChordNotesMidi?: readonly number[];
+  readonly transitionType?: ChordTransitionType;
+  /** 0..1 inside the transition window at the end of the current chord step. */
+  readonly transitionProgress?: number;
+  /** Index of the active chord step inside the progression. */
+  readonly stepIndex?: number;
+}
+
+/** Pre-allocated, engine-owned harmony frame updated per render chunk (zero alloc). */
+export interface MutableHarmonyFrame {
+  rootNote: number;
+  rootMidi: number;
+  scaleId: string;
+  chordPreset: string;
+  scaleNotesMidi: readonly number[];
+  chordNotesMidi: readonly number[];
+  bassMidi: number;
+  nextChordNotesMidi: readonly number[];
+  transitionType: ChordTransitionType;
+  transitionProgress: number;
+  stepIndex: number;
 }
 
 export interface VoiceRenderContext {

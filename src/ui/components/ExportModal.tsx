@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Download, FolderCheck, X } from 'lucide-react';
 import {
   exportAudioAsync,
   type ExportRequest,
   type ExportResult,
 } from '../../audio-host';
+import { computeFullRepeatBars } from '../../core/engine/cycleMath';
 import type { BeatSnapshot } from '../../core/state/types';
 import type { BrowserFsAdapter } from '../../storage';
 
@@ -36,6 +37,8 @@ function triggerBrowserDownload(
   window.setTimeout(() => URL.revokeObjectURL(url), 2500);
 }
 
+const MAX_EXPORT_BARS = 256;
+
 export function ExportModal({
   isOpen,
   projectName,
@@ -51,6 +54,14 @@ export function ExportModal({
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ExportResult | null>(null);
+
+  const fullRepeatBars = useMemo(() => computeFullRepeatBars(snapshot), [snapshot]);
+  const beatsPerBar =
+    (snapshot.timeSignature.numerator || 4) * (4 / (snapshot.timeSignature.denominator || 4));
+  const durationSec = (bars * beatsPerBar * 60) / Math.max(20, snapshot.tempoBpm);
+  const durationLabel = `${Math.floor(durationSec / 60)}:${String(
+    Math.round(durationSec % 60),
+  ).padStart(2, '0')} min`;
 
   if (!isOpen) return null;
 
@@ -89,7 +100,7 @@ export function ExportModal({
           }
         }
         onNotice(
-          `Export im Ordner „Projekte/${projectName}/exports/“ gespeichert!`,
+          `Export gespeichert in ${fsAdapter.describeProjectLocation(projectName)}/exports/`,
         );
       } else {
         if (result.mainFile) {
@@ -158,16 +169,40 @@ export function ExportModal({
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Loop-Länge ({bars} Takte)
+                Loop-Länge in Takten (≈ {durationLabel})
               </label>
               <input
-                type="range"
-                min={2}
-                max={32}
+                type="number"
+                min={1}
+                max={MAX_EXPORT_BARS}
                 step={1}
                 value={bars}
-                onChange={(e) => setBars(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = Math.round(Number(e.target.value));
+                  if (Number.isFinite(v)) setBars(Math.max(1, Math.min(MAX_EXPORT_BARS, v)));
+                }}
               />
+              <div className="preset-chips" style={{ flexWrap: 'wrap' }}>
+                {[8, 16, 32, 64, 128].map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    className={`preset-chip${bars === b ? ' is-active' : ''}`}
+                    onClick={() => setBars(b)}
+                  >
+                    {b}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`preset-chip${bars === fullRepeatBars ? ' is-active' : ''}`}
+                  title="Länge, nach der sich alle Layer, Bewegungen und die Akkordfolge exakt wiederholen (kgV) – ergibt einen perfekt nahtlosen Loop."
+                  disabled={fullRepeatBars > MAX_EXPORT_BARS}
+                  onClick={() => setBars(Math.min(MAX_EXPORT_BARS, fullRepeatBars))}
+                >
+                  Volle Wiederholung ({fullRepeatBars})
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -197,7 +232,7 @@ export function ExportModal({
             <span style={{ fontSize: 11.5 }}>
               Ziel:{' '}
               {fsConnected
-                ? `Lokaler Projekt-Ordner (Projekte/${projectName}/exports/)`
+                ? `Projekt-Ordner (${fsAdapter.describeProjectLocation(projectName)}/exports/)`
                 : 'Direkter Browser-Download'}
             </span>
             {fsConnected && <FolderCheck size={14} color="#22c55e" />}

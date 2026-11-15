@@ -2,7 +2,7 @@
   "id": "proj_mwi0ejmx_1",
   "name": "Cooler Beat",
   "version": 1,
-  "updatedAt": 1794762035373,
+  "updatedAt": 1794766651127,
   "activeSnapshot": {
     "id": "snap_hypnotic_aminor_main",
     "tempoBpm": 130,
@@ -14,8 +14,8 @@
     "masterGlue": 0.25,
     "harmony": {
       "rootNote": 9,
-      "scaleId": "locrian",
-      "chordPreset": "power5",
+      "scaleId": "natural_minor",
+      "chordPreset": "minor7",
       "progressionId": "classic_i_VI_VII_i"
     },
     "curves": [
@@ -301,6 +301,20 @@
               "threshold": 0.72,
               "waveShape": 0.65
             }
+          },
+          {
+            "id": "layer_d_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
           }
         ],
         "voice": {
@@ -403,7 +417,8 @@
             "melodyPattern": 2,
             "melodyRange": 0.28
           }
-        }
+        },
+        "group": "Grundlage"
       },
       {
         "id": "layer_e",
@@ -584,7 +599,8 @@
             "depth": 0.28,
             "id": "mod_mwi13x9i_2"
           }
-        ]
+        ],
+        "group": "Grundlage"
       },
       {
         "id": "layer_mwi16xbz_3",
@@ -748,7 +764,8 @@
             "depth": 0,
             "id": "mod_mwi16xc0_e"
           }
-        ]
+        ],
+        "group": "Grundlage"
       },
       {
         "id": "layer_9",
@@ -912,14 +929,15 @@
             "depth": 1,
             "id": "mod_mwi19hz0_h"
           }
-        ]
+        ],
+        "group": "Grundlage"
       },
       {
         "id": "layer_a",
         "name": "Sub-Bewegung 5",
         "color": "#f59e0b",
         "enabled": true,
-        "muted": false,
+        "muted": true,
         "solo": false,
         "level": 0.45,
         "pan": 0,
@@ -1076,14 +1094,15 @@
             "depth": 1,
             "id": "mod_mwi1n3l7_i"
           }
-        ]
+        ],
+        "group": "SubVibes"
       },
       {
         "id": "layer_mwi1p1ju_j",
         "name": "Sub-Bewegung 5 (Kopie)",
         "color": "#f59e0b",
         "enabled": true,
-        "muted": false,
+        "muted": true,
         "solo": false,
         "level": 0.34,
         "pan": 0,
@@ -1240,14 +1259,15 @@
             "depth": 0.47,
             "id": "mod_mwi1po46_w"
           }
-        ]
+        ],
+        "group": "SubVibes"
       },
       {
         "id": "layer_c",
         "name": "Akkord & Arpeggio 7",
         "color": "#ff6b4a",
         "enabled": true,
-        "muted": false,
+        "muted": true,
         "solo": false,
         "level": 0.73,
         "pan": 0,
@@ -1424,8 +1444,169 @@
             "id": "mod_mwi2a4zi_11"
           }
         ]
+      },
+      {
+        "id": "layer_mwi5fkm4ta5_9",
+        "name": "Glocke & Mallet 8",
+        "color": "#22c55e",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.8,
+        "pan": 0,
+        "cycleLength": {
+          "value": 8,
+          "unit": "bars"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwi5fkm4ta5_9_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 8,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 11,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.41,
+              "euclidMode": 0
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "modal-bell",
+          "version": 1,
+          "params": {
+            "material": 0.82,
+            "malletHardness": 0.6,
+            "decay": 1.5157634375026832,
+            "shimmer": 0.68,
+            "octaveShift": 1,
+            "melodyPattern": 3,
+            "melodyRange": 0.89
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwi5fkm4ta5_9_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.65,
+              "focus": 0.25,
+              "filterMode": 0,
+              "tilt": 0
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.35,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 0,
+              "midDb": 0,
+              "highDb": 0,
+              "stereoOrbit": 1
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwi5fkm4ta5_9_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": []
       }
     ]
   },
-  "activeHistoryNodeId": "hist_mwi2xidu_z7_jjqb"
+  "activeHistoryNodeId": "hist_mwi5q2cr_3s_7wp9"
 }

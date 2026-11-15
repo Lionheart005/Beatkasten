@@ -8,3 +8,8 @@ export {
   type StemRenderResult,
 } from './OfflineRenderer';
 export { type EngineTelemetry, TechnoEngine } from './TechnoEngine';
+export {
+  computeFullRepeatBars,
+  computeSnapshotCycleBeats,
+  snapshotBeatsPerBar,
+} from './cycleMath';
