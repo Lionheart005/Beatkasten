@@ -13,6 +13,22 @@ import {
   type VoiceRenderContext,
 } from '../../registry/types';
 import { midiToFreq } from '../../theory';
+import {
+  computeMelodyStep,
+  EXTENDED_MELODY_OPTIONS,
+  extendedMelodyDegree,
+  fillChordDegrees,
+  MELODY_CHORD_TONES_PARAM,
+  MELODY_EXTRA_PARAMS,
+  MELODY_LEAP_PARAM,
+  MELODY_LENGTH_PARAM,
+  MELODY_MAX_MODE,
+  MELODY_RATE_PARAM,
+  MELODY_REST_PARAM,
+  MELODY_SEED_PARAM,
+  shapeMelodyNote,
+  type MelodyStepInfo,
+} from '../../theory/melody';
 
 const TWO_PI = Math.PI * 2;
 const NUM_VOICES = 4;
@@ -137,10 +153,10 @@ const MELODY_PATTERN_PARAM: ParameterSchema = {
   id: 'melodyPattern',
   label: 'Melodie-Bewegung',
   description:
-    '0=Grundton/Akkord, 1=Pendel 1–5, 2=Skala-Lauf, 3=Sprung-Rätsel',
+    'Wie sich die Orgelstimme bewegt – Grundton, Pendel, Läufe, Akkord-Arpeggien oder gewürfelte Motive. Im Orgel-Akkord-Modus wird der ganze Akkord mitbewegt.',
   domain: 'harmony',
   min: 0,
-  max: 3,
+  max: MELODY_MAX_MODE,
   step: 1,
   defaultValue: 1,
   curve: 'linear',
@@ -150,8 +166,24 @@ const MELODY_PATTERN_PARAM: ParameterSchema = {
     { value: 1, label: 'Pendel 1–5' },
     { value: 2, label: 'Skala-Lauf' },
     { value: 3, label: 'Sprung-Rätsel' },
+    { value: 4, label: 'Quinte/Terz-Duett' },
+    ...EXTENDED_MELODY_OPTIONS,
   ],
 };
+
+const MELODY_RANGE_PARAM: ParameterSchema = {
+  id: 'melodyRange',
+  label: 'Ton-Bewegung',
+  description: 'Spannweite der Melodie für Läufe, Arpeggien und Zufallsmodi (klein = enge Schritte, groß = über mehrere Oktaven).',
+  domain: 'harmony',
+  min: 0,
+  max: 1,
+  defaultValue: 0.45,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const DUET_DEGREES = new Int32Array([0, 2, 4, 2, 0, 3, 4, 1]);
 
 function readParam(schema: ParameterSchema, params: Record<string, number>): number {
   const raw = params[schema.id];
@@ -206,6 +238,10 @@ export class PipeOrganVoice implements VoiceInstance {
   private chiffCenterHz = 1800;
 
   private noteCounter = 0;
+  private readonly melInfo: MelodyStepInfo = { step: 0, phrase: 0, isNewNote: true };
+  private readonly chordDegBuf = new Int8Array(SCALE_BUF_CAP);
+  private readonly degOut = new Float64Array(1);
+  private melodyParams: Record<string, number> = {};
   private hasInitializedNotes = false;
   private hasSeenTrigger = false;
   private lastRelease = -1;
@@ -328,8 +364,9 @@ export class PipeOrganVoice implements VoiceInstance {
     voiceMode: number,
     octaveShift: number,
     melodyPattern: number,
-    step: number,
-  ): void {
+    counter: number,
+  ): boolean {
+    const params = this.melodyParams;
     const rootMidi = Number.isFinite(ctx.harmony.rootMidi) ? ctx.harmony.rootMidi : 36;
     let targetBaseMidi = rootMidi + (octaveShift + 1) * 12;
     while (targetBaseMidi < 28) targetBaseMidi += 12;
@@ -337,6 +374,21 @@ export class PipeOrganVoice implements VoiceInstance {
 
     const scaleLen = this.fillFoldedScale(ctx.harmony.scaleNotesMidi, targetBaseMidi);
     const octDegs = Math.max(1, Math.floor(scaleLen / 3));
+    const mel = computeMelodyStep(
+      counter,
+      readParam(MELODY_RATE_PARAM, params),
+      readParam(MELODY_LENGTH_PARAM, params),
+      melodyPattern,
+      this.melInfo,
+    );
+    const step = mel.step;
+    const seed = readParam(MELODY_SEED_PARAM, params);
+    const chordCount = fillChordDegrees(
+      this.scaleBuf,
+      scaleLen,
+      ctx.harmony.chordNotesMidi,
+      this.chordDegBuf,
+    );
 
     let leadDeg = 0;
     switch (melodyPattern) {
@@ -352,12 +404,39 @@ export class PipeOrganVoice implements VoiceInstance {
       case 3: // Sprung-Rätsel
         leadDeg = (SPRUNG_DEGREES[step & 7] ?? 0) % octDegs;
         break;
+      case 4: // Quinte/Terz-Duett (Lauf der Unterstimme)
+        leadDeg = (DUET_DEGREES[step & 7] ?? 0) % Math.max(1, scaleLen);
+        break;
       default:
-        leadDeg = 0;
+        leadDeg = extendedMelodyDegree(
+          melodyPattern,
+          step,
+          mel.phrase,
+          readParam(MELODY_RANGE_PARAM, params),
+          scaleLen,
+          this.chordDegBuf,
+          chordCount,
+          seed,
+        );
         break;
     }
 
-    const leadMidi = this.scaleBuf[leadDeg] ?? targetBaseMidi;
+    const octaveJump = shapeMelodyNote(
+      leadDeg,
+      step,
+      seed,
+      readParam(MELODY_CHORD_TONES_PARAM, params),
+      readParam(MELODY_LEAP_PARAM, params),
+      readParam(MELODY_REST_PARAM, params),
+      this.chordDegBuf,
+      chordCount,
+      this.degOut,
+    );
+    // Haltebogen: vorige Töne liegen lassen.
+    if (Number.isNaN(octaveJump) && this.hasInitializedNotes) return false;
+    leadDeg = Math.max(0, Math.min(scaleLen - 1, this.degOut[0]!));
+    const leadMidi =
+      (this.scaleBuf[leadDeg] ?? targetBaseMidi) + (Number.isNaN(octaveJump) ? 0 : octaveJump);
 
     if (voiceMode === 0) {
       // Single upper voice
@@ -416,6 +495,7 @@ export class PipeOrganVoice implements VoiceInstance {
     }
 
     this.chiffCenterHz = clamp(this.voiceHz[0]! * 2.4, 850, Math.min(4000, this.sampleRate * 0.38));
+    return true;
   }
 
   private updateDrawbars(register: number): void {
@@ -459,6 +539,7 @@ export class PipeOrganVoice implements VoiceInstance {
     const voiceMode = Math.round(readParam(VOICE_MODE_PARAM, params));
     const octaveShift = Math.round(readParam(OCTAVE_SHIFT_PARAM, params));
     const melodyPattern = Math.round(readParam(MELODY_PATTERN_PARAM, params));
+    this.melodyParams = params;
 
     const sr = this.sampleRate;
     if (Math.abs(release - this.lastRelease) > 1e-5) {
@@ -482,8 +563,8 @@ export class PipeOrganVoice implements VoiceInstance {
         this.prevVoiceActive[v] = this.voiceActiveTarget[v]!;
       }
 
-      const step = this.noteCounter++;
-      this.selectNotes(ctx, voiceMode, octaveShift, melodyPattern, step);
+      const counter = this.noteCounter++;
+      this.selectNotes(ctx, voiceMode, octaveShift, melodyPattern, counter);
       this.hasInitializedNotes = true;
       this.lastVoiceMode = voiceMode;
       this.lastOctaveShift = octaveShift;
@@ -769,6 +850,8 @@ export const pipeOrganVoiceModule: VoiceModule = {
     VOICE_MODE_PARAM,
     OCTAVE_SHIFT_PARAM,
     MELODY_PATTERN_PARAM,
+    MELODY_RANGE_PARAM,
+    ...MELODY_EXTRA_PARAMS,
   ],
   createInstance(sampleRate: number): VoiceInstance {
     return new PipeOrganVoice(sampleRate);

@@ -609,10 +609,259 @@ export const timeEuclidOperator: TimeOperatorModule = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Swing / Shuffle: verschiebt jeden zweiten Raster-Schritt nach hinten
+// (Phasen-Warp – muss VOR Puls-Interferenz / Euklid stehen)
+// ---------------------------------------------------------------------------
+
+const SWING_AMOUNT_PARAM: ParameterSchema = {
+  id: 'swingAmount',
+  label: 'Swing',
+  description:
+    'Wie stark jeder zweite Schritt verzögert wird: 0 = gerade (maschinell), 0.33 ≈ Triolen-Shuffle, darüber = stark „hinkend“.',
+  domain: 'time',
+  min: 0,
+  max: 0.7,
+  defaultValue: 0.2,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const SWING_GRID_PARAM: ParameterSchema = {
+  id: 'swingGrid',
+  label: 'Swing-Raster',
+  description: 'Auf welchen Notenwert der Swing wirkt (meist 1/16 in Techno & House).',
+  domain: 'time',
+  min: 1,
+  max: 8,
+  step: 1,
+  defaultValue: 4,
+  curve: 'linear',
+  modulatable: false,
+  options: [
+    { value: 1, label: '1/4' },
+    { value: 2, label: '1/8' },
+    { value: 4, label: '1/16' },
+    { value: 8, label: '1/32' },
+  ],
+};
+
+/** Swing-Warp für eine Position u (in Raster-Schritten); Schrittpaare [2k, 2k+2). */
+export function swingWarpSteps(u: number, swing: number): number {
+  const pair = Math.floor(u / 2);
+  const local = u - pair * 2;
+  const split = 1 + swing;
+  // Ausgabe-Schritt 1 (der „und“-Schlag) beginnt erst bei local = 1 + swing.
+  const out = local < split ? local / split : 1 + (local - split) / (2 - split);
+  return pair * 2 + out;
+}
+
+export const timeSwingOperator: TimeOperatorModule = {
+  id: 'time-swing',
+  version: 1,
+  displayName: 'Swing & Shuffle',
+  description:
+    'Verzögert jeden zweiten Schritt des Rasters – aus starren 16teln wird ein federnder Groove. Steht vor der Puls-Erzeugung.',
+  parameters: [SWING_AMOUNT_PARAM, SWING_GRID_PARAM],
+  evaluateTimeInto(
+    ctx: TimeEvalContext,
+    params: Record<string, number>,
+    prevFrame: TimeFrame,
+    outFrame: MutableTimeFrame,
+  ): void {
+    const swing = readParam(SWING_AMOUNT_PARAM, params);
+    const perBeat = Math.max(1, Math.round(readParam(SWING_GRID_PARAM, params)));
+    const p = wrapPhase01(prevFrame.warpedPhase);
+    const steps = Math.max(2, Math.round(ctx.cycleBeats * perBeat));
+    let warped = p;
+    if (swing > 1e-4 && steps % 2 === 0) {
+      warped = swingWarpSteps(p * steps, swing) / steps;
+      if (warped >= 1) warped -= 1;
+    }
+    outFrame.warpedPhase = warped;
+    outFrame.pulseEnergy = prevFrame.pulseEnergy;
+    outFrame.triggerIntensity = prevFrame.triggerIntensity;
+    outFrame.accent = prevFrame.accent;
+    outFrame.stepIndex = prevFrame.stepIndex;
+    outFrame.pulseSlope = prevFrame.pulseSlope ?? 0;
+  },
+  evaluateTime(ctx: TimeEvalContext, params: Record<string, number>, prevFrame: TimeFrame): TimeFrame {
+    const out: MutableTimeFrame = {
+      warpedPhase: 0,
+      pulseEnergy: 0,
+      triggerIntensity: 0,
+      accent: 0,
+      stepIndex: 0,
+      pulseSlope: 0,
+    };
+    this.evaluateTimeInto!(ctx, params, prevFrame, out);
+    return out;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Zufall & Ghost-Notes: gewürfelte (aber wiederholbare) Auslassungen und Dynamik
+// (Maske – muss NACH Puls-Interferenz / Euklid stehen)
+// ---------------------------------------------------------------------------
+
+const CHANCE_PARAM: ParameterSchema = {
+  id: 'chance',
+  label: 'Wahrscheinlichkeit',
+  description: 'Wie viele Schläge tatsächlich gespielt werden (1 = alle, 0.5 = etwa jeder zweite – gewürfelt).',
+  domain: 'time',
+  min: 0,
+  max: 1,
+  defaultValue: 0.8,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const GHOST_PARAM: ParameterSchema = {
+  id: 'ghost',
+  label: 'Ghost-Notes statt Pausen',
+  description: '0 = ausgewürfelte Schläge fallen weg, 1 = sie werden ganz leise als „Geisternoten“ gespielt.',
+  domain: 'time',
+  min: 0,
+  max: 1,
+  defaultValue: 0.5,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const HUMANIZE_PARAM: ParameterSchema = {
+  id: 'humanize',
+  label: 'Lebendige Dynamik',
+  description: 'Leichte, zufällige Lautstärke-Schwankung jedes Schlags – wie von Hand gespielt.',
+  domain: 'time',
+  min: 0,
+  max: 1,
+  defaultValue: 0.3,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const CHANCE_SEED_PARAM: ParameterSchema = {
+  id: 'chanceSeed',
+  label: 'Würfel (Variante)',
+  description: 'Andere Zahl = anderes Zufallsmuster. Gleiche Zahl = exakt gleiches Muster.',
+  domain: 'time',
+  min: 0,
+  max: 99,
+  step: 1,
+  defaultValue: 3,
+  curve: 'linear',
+  modulatable: false,
+};
+
+const CHANCE_LOOP_PARAM: ParameterSchema = {
+  id: 'chanceLoop',
+  label: 'Muster wiederholt sich nach',
+  description: 'Nach wie vielen Layer-Zyklen das gewürfelte Muster wieder von vorn beginnt (wiedererkennbar statt chaotisch).',
+  domain: 'time',
+  min: 1,
+  max: 16,
+  step: 1,
+  defaultValue: 2,
+  curve: 'linear',
+  modulatable: false,
+  options: [
+    { value: 1, label: '1 Zyklus' },
+    { value: 2, label: '2 Zyklen' },
+    { value: 4, label: '4 Zyklen' },
+    { value: 8, label: '8 Zyklen' },
+    { value: 16, label: '16 Zyklen' },
+  ],
+};
+
+const CHANCE_PROTECT_PARAM: ParameterSchema = {
+  id: 'protectDownbeat',
+  label: 'Eins schützen',
+  description: 'Der erste Schlag jedes Zyklus wird immer voll gespielt (hält den Groove zusammen).',
+  domain: 'time',
+  min: 0,
+  max: 1,
+  step: 1,
+  defaultValue: 1,
+  curve: 'linear',
+  modulatable: false,
+  options: [
+    { value: 0, label: 'Aus' },
+    { value: 1, label: 'An' },
+  ],
+};
+
+function chanceHash(a: number, b: number, c: number): number {
+  let h = (Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+export const timeChanceOperator: TimeOperatorModule = {
+  id: 'time-chance',
+  version: 1,
+  displayName: 'Zufall & Ghost-Notes',
+  description:
+    'Würfelt pro Schlag, ob er gespielt, leise (Ghost-Note) oder ausgelassen wird – wiederholbar nach N Zyklen. Steht hinter der Puls-Erzeugung.',
+  parameters: [CHANCE_PARAM, GHOST_PARAM, HUMANIZE_PARAM, CHANCE_SEED_PARAM, CHANCE_LOOP_PARAM, CHANCE_PROTECT_PARAM],
+  evaluateTimeInto(
+    ctx: TimeEvalContext,
+    params: Record<string, number>,
+    prevFrame: TimeFrame,
+    outFrame: MutableTimeFrame,
+  ): void {
+    const chance = readParam(CHANCE_PARAM, params);
+    const ghost = readParam(GHOST_PARAM, params);
+    const humanize = readParam(HUMANIZE_PARAM, params);
+    const seed = readParam(CHANCE_SEED_PARAM, params) | 0;
+    const loop = Math.max(1, Math.round(readParam(CHANCE_LOOP_PARAM, params)));
+    const protect = Math.round(readParam(CHANCE_PROTECT_PARAM, params)) === 1;
+
+    const state = ctx.slotState;
+    const p = wrapPhase01(prevFrame.warpedPhase);
+    let gain = state && Number.isFinite(state[0]!) ? state[0]! : 1;
+    if (prevFrame.triggerIntensity > 0.01) {
+      // Schritt-Identität: 1/64-Position im Zyklus + Zyklus im Wiederholungsfenster
+      const pos = Math.floor(p * Math.max(1, ctx.cycleBeats) * 16 + 1e-6);
+      const cyc = ((ctx.cycleIndex % loop) + loop) % loop;
+      const isDownbeat = pos === 0;
+      const r = chanceHash(seed, pos, cyc);
+      if (protect && isDownbeat) gain = 1;
+      else if (r < chance) gain = 1;
+      else gain = ghost * 0.32;
+      if (gain > 0 && humanize > 0) {
+        const h = chanceHash(seed + 17, pos, cyc);
+        gain *= 1 - humanize * 0.45 * h;
+      }
+      if (state) state[0] = gain;
+    }
+    outFrame.warpedPhase = prevFrame.warpedPhase;
+    outFrame.pulseEnergy = prevFrame.pulseEnergy * gain;
+    outFrame.triggerIntensity = gain > 0.001 ? prevFrame.triggerIntensity * gain : 0;
+    outFrame.accent = prevFrame.accent * (gain > 0 ? 0.6 + 0.4 * gain : 0);
+    outFrame.stepIndex = prevFrame.stepIndex;
+    outFrame.pulseSlope = prevFrame.pulseSlope ?? 0;
+  },
+  evaluateTime(ctx: TimeEvalContext, params: Record<string, number>, prevFrame: TimeFrame): TimeFrame {
+    const out: MutableTimeFrame = {
+      warpedPhase: 0,
+      pulseEnergy: 0,
+      triggerIntensity: 0,
+      accent: 0,
+      stepIndex: 0,
+      pulseSlope: 0,
+    };
+    this.evaluateTimeInto!(ctx, params, prevFrame, out);
+    return out;
+  },
+};
+
 export const TIME_OPERATORS: readonly TimeOperatorModule[] = [
   timeWarpOperator,
   timeGridGravityOperator,
   timePhaseDriftOperator,
+  timeSwingOperator,
   timePulseInterferenceOperator,
   timeEuclidOperator,
+  timeChanceOperator,
 ];

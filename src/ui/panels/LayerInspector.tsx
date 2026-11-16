@@ -9,7 +9,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
-import { createEuclidOperatorConfig } from '../../core/state/presets';
+import { insertTimeOperator, OPTIONAL_TIME_OPERATORS } from '../../core/state/presets';
 import { euclidPattern } from '../../core/time/operators';
 import type { DrawnCurveData } from '../../core/math/curves';
 import { buildDefaultParams } from '../../core/registry/types';
@@ -736,8 +736,11 @@ export function LayerInspector({
               );
             })}
 
-            {!layer.timeOperators.some((op) => op.moduleId === 'time-euclid') && (
+            {OPTIONAL_TIME_OPERATORS.filter(
+              (opt) => !layer.timeOperators.some((op) => op.moduleId === opt.moduleId),
+            ).map((opt) => (
               <button
+                key={opt.moduleId}
                 type="button"
                 className="btn-sm"
                 onClick={() =>
@@ -745,16 +748,16 @@ export function LayerInspector({
                     layer.id,
                     (l) => ({
                       ...l,
-                      timeOperators: [...l.timeOperators, createEuclidOperatorConfig(l.id)],
+                      timeOperators: insertTimeOperator(l.timeOperators, opt.create(l.id)),
                     }),
-                    'Euklidischer Rhythmus hinzugefügt',
+                    `${opt.label} hinzugefügt`,
                   )
                 }
-                title="k Schläge gleichmäßig auf n Steps verteilen (Tresillo, Clave, Bossa …)"
+                title={opt.hint}
               >
-                <Plus size={12} /> Euklidischer Rhythmus
+                <Plus size={12} /> {opt.label}
               </button>
-            )}
+            ))}
           </div>
         </div>
 

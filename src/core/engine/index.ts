@@ -4,7 +4,10 @@ export {
   type OfflineRenderOptions,
   type RenderedAudioBuffer,
   renderOfflineLoop,
+  renderSongChain,
   renderStems,
+  type SongChainPart,
+  type SongChainRenderOptions,
   type StemRenderResult,
 } from './OfflineRenderer';
 export { type EngineTelemetry, TechnoEngine } from './TechnoEngine';

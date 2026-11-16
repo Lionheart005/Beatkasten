@@ -5,6 +5,7 @@ import { DEFAULT_CURVE_PRESETS, type DrawnCurveData } from '../../core/math/curv
 import {
   commitSnapshot,
   createBellsAndOrganPreset,
+  createNachtschichtProject,
   createHypnoticAMinorProject,
   createInitialHistory,
   createDefaultLayer,
@@ -76,6 +77,71 @@ const fsAdapterSingleton = new BrowserFsAdapter();
 
 const HISTORY_DEBOUNCE_MS = 450;
 
+/** Klont einen Layer mit frischen IDs für Layer, Operatoren, Karten und Modulationen. */
+function cloneLayerWithNewIds(src: LayerConfig, name: string): LayerConfig {
+  const newLayerId = nextUiId('layer');
+  const cardIdMap = new Map<string, string>();
+  const opIdMap = new Map<string, string>();
+
+  const clonedOps = src.timeOperators.map((op) => {
+    const nid = nextUiId('op');
+    opIdMap.set(op.id, nid);
+    return { ...op, id: nid, params: { ...op.params } };
+  });
+  const clonedChain = src.processorChain.map((card) => {
+    const nid = nextUiId('card');
+    cardIdMap.set(card.id, nid);
+    return { ...card, id: nid, params: { ...card.params } };
+  });
+  const modIdMap = new Map<string, string>();
+  src.modulations.forEach((m) => modIdMap.set(m.id, nextUiId('mod')));
+
+  const clonedMods = src.modulations.map((m) => {
+    let nextTargetCardId = m.targetCardId;
+    if (m.targetDomain === 'processor') {
+      nextTargetCardId = cardIdMap.get(m.targetCardId) ?? m.targetCardId;
+    } else if (m.targetDomain === 'time') {
+      nextTargetCardId = opIdMap.get(m.targetCardId) ?? m.targetCardId;
+    } else if (m.targetDomain === 'modulation') {
+      nextTargetCardId = modIdMap.get(m.targetCardId) ?? m.targetCardId;
+    }
+    return {
+      ...m,
+      id: modIdMap.get(m.id) ?? nextUiId('mod'),
+      sourceConfig: {
+        ...m.sourceConfig,
+        sourceLayerId:
+          m.sourceConfig.sourceLayerId === src.id
+            ? newLayerId
+            : m.sourceConfig.sourceLayerId,
+      },
+      targetCardId: nextTargetCardId,
+    };
+  });
+
+  const cloned: LayerConfig = {
+    ...src,
+    id: newLayerId,
+    name,
+    voice: {
+      ...src.voice,
+      params: { ...src.voice.params },
+    },
+    ...(src.secondaryVoice
+      ? {
+          secondaryVoice: {
+            ...src.secondaryVoice,
+            params: { ...src.secondaryVoice.params },
+          },
+        }
+      : {}),
+    timeOperators: clonedOps,
+    processorChain: clonedChain,
+    modulations: clonedMods,
+  };
+  return cloned;
+}
+
 export function useStudioStore() {
   const [project, setProject] = useState<ProjectDocument>(() =>
     createHypnoticAMinorProject(),
@@ -97,6 +163,9 @@ export function useStudioStore() {
   const [sectionSwitchMode, setSectionSwitchMode] =
     useState<SectionSwitchMode>('next-bar');
   const [pendingSectionId, setPendingSectionId] = useState<string | null>(null);
+  /** Abschnitt, der gerade bearbeitet/gespielt wird (für Anzeige & Auto-Sync). */
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [autoSyncSection, setAutoSyncSection] = useState<boolean>(true);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [fsConnected, setFsConnected] = useState<boolean>(false);
   const [fsFolderName, setFsFolderName] = useState<string | null>(null);
@@ -197,6 +266,7 @@ export function useStudioStore() {
           const loaded = loadedRaw ? repairProjectIds(loadedRaw) : null;
           if (!cancelled && loaded) {
             setProject(loaded);
+            setActiveSectionId(null);
             setSelectedLayerId(loaded.activeSnapshot.layers[0]?.id ?? '');
             setSelectedCurveId(loaded.activeSnapshot.curves[0]?.id ?? '');
           }
@@ -457,66 +527,8 @@ export function useStudioStore() {
         (l) => l.id === layerId,
       );
       if (!src) return;
-      const newLayerId = nextUiId('layer');
-      const cardIdMap = new Map<string, string>();
-      const opIdMap = new Map<string, string>();
-
-      const clonedOps = src.timeOperators.map((op) => {
-        const nid = nextUiId('op');
-        opIdMap.set(op.id, nid);
-        return { ...op, id: nid, params: { ...op.params } };
-      });
-      const clonedChain = src.processorChain.map((card) => {
-        const nid = nextUiId('card');
-        cardIdMap.set(card.id, nid);
-        return { ...card, id: nid, params: { ...card.params } };
-      });
-      const modIdMap = new Map<string, string>();
-      src.modulations.forEach((m) => modIdMap.set(m.id, nextUiId('mod')));
-
-      const clonedMods = src.modulations.map((m) => {
-        let nextTargetCardId = m.targetCardId;
-        if (m.targetDomain === 'processor') {
-          nextTargetCardId = cardIdMap.get(m.targetCardId) ?? m.targetCardId;
-        } else if (m.targetDomain === 'time') {
-          nextTargetCardId = opIdMap.get(m.targetCardId) ?? m.targetCardId;
-        } else if (m.targetDomain === 'modulation') {
-          nextTargetCardId = modIdMap.get(m.targetCardId) ?? m.targetCardId;
-        }
-        return {
-          ...m,
-          id: modIdMap.get(m.id) ?? nextUiId('mod'),
-          sourceConfig: {
-            ...m.sourceConfig,
-            sourceLayerId:
-              m.sourceConfig.sourceLayerId === src.id
-                ? newLayerId
-                : m.sourceConfig.sourceLayerId,
-          },
-          targetCardId: nextTargetCardId,
-        };
-      });
-
-      const cloned: LayerConfig = {
-        ...src,
-        id: newLayerId,
-        name: `${src.name} (Kopie)`,
-        voice: {
-          ...src.voice,
-          params: { ...src.voice.params },
-        },
-        ...(src.secondaryVoice
-          ? {
-              secondaryVoice: {
-                ...src.secondaryVoice,
-                params: { ...src.secondaryVoice.params },
-              },
-            }
-          : {}),
-        timeOperators: clonedOps,
-        processorChain: clonedChain,
-        modulations: clonedMods,
-      };
+      const cloned = cloneLayerWithNewIds(src, `${src.name} (Kopie)`);
+      const newLayerId = cloned.id;
 
       commitSnapshotImmediate(
         (snap) => ({
@@ -875,10 +887,27 @@ export function useStudioStore() {
         | 'hypnotic-aminor'
         | 'triplet-riddle'
         | 'chord-offbeat-arp'
-        | 'bells-organ',
+        | 'bells-organ'
+        | 'nachtschicht-song',
     ) => {
       flushPendingCommit();
-      if (presetKey === 'hypnotic-aminor') {
+      if (presetKey === 'nachtschicht-song') {
+        // Kompletter Song als NEUES Projekt (aktuelles Projekt bleibt gespeichert).
+        const demo = createNachtschichtProject();
+        const doc: ProjectDocument = {
+          ...demo,
+          id: nextUiId('proj'),
+          name: 'Nachtschicht_Demo',
+          updatedAt: Date.now(),
+        };
+        setProject(doc);
+        setActiveSectionId(doc.sections[2]?.id ?? null);
+        setSelectedLayerId(doc.activeSnapshot.layers.find((l) => l.id === 'ns_acid')?.id ?? '');
+        setSelectedCurveId('');
+        audioBridgeSingleton.updateSnapshot(doc.activeSnapshot);
+        void persistProject(doc);
+        showNotice('Demo-Song „Nachtschicht“ geladen – 6 Abschnitte, Export „Ganzer Song“ verfügbar');
+      } else if (presetKey === 'hypnotic-aminor') {
         const doc = createHypnoticAMinorProject();
         commitSnapshotImmediate(
           () => doc.activeSnapshot,
@@ -909,7 +938,7 @@ export function useStudioStore() {
       }
       setActiveModTarget(null);
     },
-    [commitSnapshotImmediate, flushPendingCommit, showNotice],
+    [commitSnapshotImmediate, flushPendingCommit, persistProject, showNotice],
   );
 
   // History Tree Actions
@@ -1027,6 +1056,7 @@ export function useStudioStore() {
 
       const applyLoadedSection = () => {
         setPendingSectionId(null);
+        setActiveSectionId(section.id);
         setProject((prev) => {
           const committed = commitSnapshot(
             prev.historyNodes,
@@ -1088,6 +1118,7 @@ export function useStudioStore() {
         void persistProject(nextDoc);
         return nextDoc;
       });
+      setActiveSectionId(newSec.id);
       showNotice(`Section gespeichert: ${newSec.name}`);
     },
     [flushPendingCommit, persistProject, showNotice],
@@ -1165,9 +1196,89 @@ export function useStudioStore() {
         void persistProject(nextDoc);
         return nextDoc;
       });
+      setActiveSectionId((cur) => (cur === sectionId ? null : cur));
     },
     [persistProject],
   );
+
+  const moveSection = useCallback(
+    (sectionId: string, delta: number) => {
+      setProject((prev) => {
+        const idx = prev.sections.findIndex((s) => s.id === sectionId);
+        const target = idx + delta;
+        if (idx < 0 || target < 0 || target >= prev.sections.length) return prev;
+        const next = [...prev.sections];
+        const [moved] = next.splice(idx, 1);
+        next.splice(target, 0, moved!);
+        const nextDoc: ProjectDocument = { ...prev, updatedAt: Date.now(), sections: next };
+        void persistProject(nextDoc);
+        return nextDoc;
+      });
+    },
+    [persistProject],
+  );
+
+  /** Kopiert einen Layer aus einem (anderen) Abschnitt in den aktuellen Beat. */
+  const copyLayerFromSection = useCallback(
+    (sectionId: string, layerId: string) => {
+      const sec = projectRef.current.sections.find((s) => s.id === sectionId);
+      const src = sec?.snapshot.layers.find((l) => l.id === layerId);
+      if (!sec || !src) return;
+      const cloned = cloneLayerWithNewIds(src, `${src.name} (aus ${sec.name})`);
+      // Gezeichnete Kurven, auf die der Layer verweist, mitnehmen.
+      const neededCurveIds = new Set(
+        src.modulations.map((m) => m.sourceConfig.curveId).filter((id): id is string => !!id),
+      );
+      commitSnapshotImmediate(
+        (snap) => {
+          const have = new Set(snap.curves.map((c) => c.id));
+          const extraCurves = sec.snapshot.curves.filter(
+            (c) => neededCurveIds.has(c.id) && !have.has(c.id),
+          );
+          return {
+            ...snap,
+            curves: extraCurves.length > 0 ? [...snap.curves, ...extraCurves] : snap.curves,
+            layers: [...snap.layers, cloned],
+          };
+        },
+        `Layer kopiert aus „${sec.name}“: ${src.name}`,
+      );
+      setSelectedLayerId(cloned.id);
+      showNotice(`„${src.name}“ aus „${sec.name}“ kopiert`);
+    },
+    [commitSnapshotImmediate, showNotice],
+  );
+
+  // Auto-Sync: Änderungen am Beat fließen (leicht verzögert) in den aktiven Abschnitt.
+  useEffect(() => {
+    if (!autoSyncSection || !activeSectionId || pendingSectionId) return;
+    const sec = project.sections.find((s) => s.id === activeSectionId);
+    if (!sec || sec.snapshot === project.activeSnapshot) return;
+    const timer = window.setTimeout(() => {
+      setProject((prev) => {
+        const target = prev.sections.find((s) => s.id === activeSectionId);
+        if (!target || target.snapshot === prev.activeSnapshot) return prev;
+        const nextDoc: ProjectDocument = {
+          ...prev,
+          updatedAt: Date.now(),
+          sections: prev.sections.map((s) =>
+            s.id === activeSectionId ? { ...s, snapshot: prev.activeSnapshot } : s,
+          ),
+        };
+        void persistProject(nextDoc);
+        return nextDoc;
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    autoSyncSection,
+    activeSectionId,
+    pendingSectionId,
+    project.activeSnapshot,
+    project.sections,
+    persistProject,
+  ]);
+
 
   // Storage & Folder Connection
   const connectProjectFolder = useCallback(async () => {
@@ -1274,6 +1385,7 @@ export function useStudioStore() {
         historyNodes: initialHistory.nodes,
       };
       setProject(doc);
+      setActiveSectionId(null);
       setSelectedLayerId(doc.activeSnapshot.layers[0]?.id ?? '');
       setSelectedCurveId(doc.activeSnapshot.curves[0]?.id ?? '');
       audioBridgeSingleton.updateSnapshot(doc.activeSnapshot);
@@ -1298,6 +1410,7 @@ export function useStudioStore() {
           return;
         }
         setProject(loaded);
+        setActiveSectionId(null);
         setSelectedLayerId(loaded.activeSnapshot.layers[0]?.id ?? '');
         setSelectedCurveId(loaded.activeSnapshot.curves[0]?.id ?? '');
         setActiveModTarget(null);
@@ -1353,6 +1466,9 @@ export function useStudioStore() {
     sectionSwitchMode,
     setSectionSwitchMode,
     pendingSectionId,
+    activeSectionId,
+    autoSyncSection,
+    setAutoSyncSection,
     subscribeTelemetry,
     getTelemetry,
     isPlaying,
@@ -1400,6 +1516,8 @@ export function useStudioStore() {
     updateSectionMeta,
     overwriteSectionWithCurrent,
     deleteSection,
+    moveSection,
+    copyLayerFromSection,
     connectProjectFolder,
     pickOtherProjectFolder,
     saveCurrentProjectExplicit,

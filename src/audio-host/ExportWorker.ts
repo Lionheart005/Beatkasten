@@ -1,4 +1,9 @@
-import { renderOfflineLoop, renderStems } from '../core/engine/OfflineRenderer';
+import {
+  renderOfflineLoop,
+  renderSongChain,
+  renderStems,
+  type SongChainPart,
+} from '../core/engine/OfflineRenderer';
 import { encodeMp3, encodeWav } from '../core/export';
 import type { BeatSnapshot } from '../core/state/types';
 import { sanitizeStorageName } from '../storage/ProjectStorageAdapter';
@@ -17,6 +22,13 @@ export interface ExportRequest {
   readonly preRollBars: number;
   readonly sampleRate?: number;
   readonly format: ExportFormat;
+  /**
+   * Song-Kette: wenn gesetzt, werden alle Abschnitte hintereinander gerendert
+   * (`snapshot`/`bars` werden dann ignoriert; Stems → nur Gesamtmix).
+   */
+  readonly songChain?: readonly SongChainPart[];
+  /** Ausklang-Takte am Ende der Song-Kette. */
+  readonly tailBars?: number;
 }
 
 export interface ExportedFile {
@@ -68,6 +80,36 @@ export function performExport(
   const sampleRate = request.sampleRate ?? 48000;
   const bars = request.bars;
   const preRollBars = request.preRollBars;
+
+  if (request.songChain && request.songChain.length > 0) {
+    const rendered = renderSongChain(request.songChain, {
+      sampleRate,
+      preRollBars,
+      tailBars: request.tailBars ?? 2,
+    });
+    const isMp3 = request.format === 'mp3-192' || request.format === 'mp3-320';
+    if (isMp3) {
+      const kbps = request.format === 'mp3-320' ? 320 : 192;
+      return {
+        mainFile: {
+          fileName: `${safeBase}_song.mp3`,
+          bytes: encodeMp3(rendered.left, rendered.right, rendered.sampleRate, kbps),
+          mimeType: 'audio/mpeg',
+        },
+        durationSeconds: rendered.durationSeconds,
+      };
+    }
+    const bitDepth: 16 | 24 =
+      request.format === 'wav-24' || request.format === 'stems-wav-24' ? 24 : 16;
+    return {
+      mainFile: {
+        fileName: `${safeBase}_song.wav`,
+        bytes: encodeWav(rendered.left, rendered.right, rendered.sampleRate, bitDepth),
+        mimeType: 'audio/wav',
+      },
+      durationSeconds: rendered.durationSeconds,
+    };
+  }
 
   switch (request.format) {
     case 'wav-16':

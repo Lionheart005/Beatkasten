@@ -13,6 +13,22 @@ import {
   type VoiceRenderContext,
 } from '../../registry/types';
 import { midiToFreq } from '../../theory';
+import {
+  computeMelodyStep,
+  EXTENDED_MELODY_OPTIONS,
+  extendedMelodyDegree,
+  fillChordDegrees,
+  MELODY_CHORD_TONES_PARAM,
+  MELODY_EXTRA_PARAMS,
+  MELODY_LEAP_PARAM,
+  MELODY_LENGTH_PARAM,
+  MELODY_MAX_MODE,
+  MELODY_RATE_PARAM,
+  MELODY_REST_PARAM,
+  MELODY_SEED_PARAM,
+  shapeMelodyNote,
+  type MelodyStepInfo,
+} from '../../theory/melody';
 
 const TWO_PI = Math.PI * 2;
 const NUM_SLOTS = 8;
@@ -112,10 +128,10 @@ const MELODY_PATTERN_PARAM: ParameterSchema = {
   id: 'melodyPattern',
   label: 'Oberstimmen-Muster',
   description:
-    '0=Einzelton, 1=Pendel 1–5, 2=Skala aufwärts, 3=Sprung-Rätsel, 4=Quinte/Terz-Duett',
+    'Wie sich die Oberstimme durch Tonleiter und Akkord bewegt – von Einzelton über Läufe und Arpeggien bis zu gewürfelten Motiven.',
   domain: 'harmony',
   min: 0,
-  max: 4,
+  max: MELODY_MAX_MODE,
   step: 1,
   defaultValue: 2,
   curve: 'linear',
@@ -126,6 +142,7 @@ const MELODY_PATTERN_PARAM: ParameterSchema = {
     { value: 2, label: 'Skala aufwärts' },
     { value: 3, label: 'Sprung-Rätsel' },
     { value: 4, label: 'Quinte/Terz-Duett' },
+    ...EXTENDED_MELODY_OPTIONS,
   ],
 };
 
@@ -193,6 +210,9 @@ export class ModalBellVoice implements VoiceInstance {
   private malletNoiseCoeff = 0.99;
 
   private noteCounter = 0;
+  private readonly melInfo: MelodyStepInfo = { step: 0, phrase: 0, isNewNote: true };
+  private readonly chordDegBuf = new Int8Array(SCALE_BUF_CAP);
+  private readonly degOut = new Float64Array(1);
   private lastMaterial = -1;
   private lastHardness = -1;
   private lastDecay = -1;
@@ -415,7 +435,21 @@ export class ModalBellVoice implements VoiceInstance {
       const scaleLen = this.fillFoldedScale(ctx.harmony.scaleNotesMidi, targetBaseMidi);
       const octaveDegs = Math.max(1, Math.floor(scaleLen / 3));
       const span = Math.max(1, Math.min(scaleLen, Math.round(1 + melodyRange * (octaveDegs * 1.6))));
-      const step = this.noteCounter++;
+      const mel = computeMelodyStep(
+        this.noteCounter++,
+        readParam(MELODY_RATE_PARAM, params),
+        readParam(MELODY_LENGTH_PARAM, params),
+        melodyPattern,
+        this.melInfo,
+      );
+      const step = mel.step;
+      const seed = readParam(MELODY_SEED_PARAM, params);
+      const chordCount = fillChordDegrees(
+        this.scaleBuf,
+        scaleLen,
+        ctx.harmony.chordNotesMidi,
+        this.chordDegBuf,
+      );
 
       let primaryDeg = 0;
       let upperDeg = -1;
@@ -450,29 +484,63 @@ export class ModalBellVoice implements VoiceInstance {
           break;
         }
         default:
-          primaryDeg = 0;
+          primaryDeg = extendedMelodyDegree(
+            melodyPattern,
+            step,
+            mel.phrase,
+            melodyRange,
+            scaleLen,
+            this.chordDegBuf,
+            chordCount,
+            seed,
+          );
           break;
       }
+
+      const octaveJump = shapeMelodyNote(
+        primaryDeg,
+        step,
+        seed,
+        readParam(MELODY_CHORD_TONES_PARAM, params),
+        readParam(MELODY_LEAP_PARAM, params),
+        readParam(MELODY_REST_PARAM, params),
+        this.chordDegBuf,
+        chordCount,
+        this.degOut,
+      );
+      const isRest = Number.isNaN(octaveJump);
+      primaryDeg = Math.max(0, Math.min(scaleLen - 1, this.degOut[0]!));
+      if (upperDeg >= 0) upperDeg = Math.min(scaleLen - 1, Math.max(upperDeg, primaryDeg + 2));
 
       const accent = Number.isFinite(ctx.timeFrame.accent)
         ? clamp(ctx.timeFrame.accent, 0, 1)
         : 0.5;
       const vel = clamp((0.42 + 0.58 * trig) * (0.82 + 0.18 * accent), 0.2, 1);
 
-      const primaryMidi = this.scaleBuf[primaryDeg] ?? targetBaseMidi;
-      const slotA = this.allocateSlot();
-      this.triggerSlot(slotA, primaryMidi, vel, targetHardness);
+      if (!isRest) {
+        let primaryMidi = (this.scaleBuf[primaryDeg] ?? targetBaseMidi) + octaveJump;
+        if (primaryMidi > MAX_BELL_MIDI) primaryMidi -= 12;
+        // Tonwiederholungen (Melodie-Tempo > 1) etwas leiser → natürlicher Puls.
+        const repVel = mel.isNewNote ? vel : vel * 0.78;
+        const slotA = this.allocateSlot();
+        this.triggerSlot(slotA, primaryMidi, repVel, targetHardness);
 
-      if (upperDeg >= 0 && upperDeg !== primaryDeg) {
-        const upperMidi = this.scaleBuf[upperDeg] ?? primaryMidi + 7;
-        const slotB = this.allocateSlot();
-        this.triggerSlot(slotB, upperMidi, vel * 0.72, targetHardness * 0.85);
+        if (upperDeg >= 0 && upperDeg !== primaryDeg) {
+          const upperMidi = (this.scaleBuf[upperDeg] ?? primaryMidi + 7) + octaveJump;
+          const slotB = this.allocateSlot();
+          this.triggerSlot(
+            slotB,
+            upperMidi > MAX_BELL_MIDI ? upperMidi - 12 : upperMidi,
+            repVel * 0.72,
+            targetHardness * 0.85,
+          );
+        }
+
+        this.malletNoiseEnv = Math.max(
+          this.malletNoiseEnv * 0.25,
+          repVel * (0.15 + 0.85 * targetHardness),
+        );
       }
-
-      this.malletNoiseEnv = Math.max(
-        this.malletNoiseEnv * 0.25,
-        vel * (0.15 + 0.85 * targetHardness),
-      );
     }
 
     const sr = this.sampleRate;
@@ -735,6 +803,7 @@ export const modalBellVoiceModule: VoiceModule = {
     OCTAVE_SHIFT_PARAM,
     MELODY_PATTERN_PARAM,
     MELODY_RANGE_PARAM,
+    ...MELODY_EXTRA_PARAMS,
   ],
   createInstance(sampleRate: number): VoiceInstance {
     return new ModalBellVoice(sampleRate);

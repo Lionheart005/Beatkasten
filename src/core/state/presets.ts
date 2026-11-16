@@ -1,5 +1,7 @@
 import type { DrawnCurveData } from '../math/curves';
 import type { CycleUnit } from '../theory/cycles';
+import { buildDefaultParams } from '../registry/types';
+import { VOICE_MODULES } from '../timbre/voices';
 import { createInitialHistory } from './HistoryTree';
 import type {
   BeatSnapshot,
@@ -75,8 +77,10 @@ function defaultVoiceParams(voiceModuleId: string): Record<string, number> {
         octaveShift: 1,
         melodyPattern: 1,
       };
-    default:
-      return {};
+    default: {
+      const mod = VOICE_MODULES.find((v) => v.id === voiceModuleId);
+      return mod ? buildDefaultParams(mod) : {};
+    }
   }
 }
 
@@ -112,6 +116,7 @@ function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
         resetCycles: 8,
       },
     },
+    createSwingOperatorConfig(prefix, true),
     {
       id: `${prefix}_time_interference`,
       moduleId: 'time-pulse-interference',
@@ -127,7 +132,93 @@ function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
       },
     },
     createEuclidOperatorConfig(prefix, true),
+    createChanceOperatorConfig(prefix, true),
   ];
+}
+
+/** Swing-Operator (Phasen-Warp, steht vor der Puls-Erzeugung). */
+export function createSwingOperatorConfig(prefix: string, bypassed = false): OperatorConfig {
+  return {
+    id: `${prefix}_time_swing`,
+    moduleId: 'time-swing',
+    version: 1,
+    bypassed,
+    params: { swingAmount: 0.2, swingGrid: 4 },
+  };
+}
+
+/** Zufall & Ghost-Notes (Maske, steht hinter der Puls-Erzeugung). */
+export function createChanceOperatorConfig(prefix: string, bypassed = false): OperatorConfig {
+  return {
+    id: `${prefix}_time_chance`,
+    moduleId: 'time-chance',
+    version: 1,
+    bypassed,
+    params: {
+      chance: 0.8,
+      ghost: 0.5,
+      humanize: 0.3,
+      chanceSeed: 3,
+      chanceLoop: 2,
+      protectDownbeat: 1,
+    },
+  };
+}
+
+/** Kanonische Reihenfolge der Zeit-Operatoren in der Kette. */
+const TIME_OPERATOR_ORDER: readonly string[] = [
+  'time-warp',
+  'time-grid-gravity',
+  'time-phase-drift',
+  'time-swing',
+  'time-pulse-interference',
+  'time-euclid',
+  'time-chance',
+];
+
+/** Optionale Operatoren, die ältere Layer nachträglich bekommen können. */
+export const OPTIONAL_TIME_OPERATORS: ReadonlyArray<{
+  readonly moduleId: string;
+  readonly label: string;
+  readonly hint: string;
+  readonly create: (prefix: string) => OperatorConfig;
+}> = [
+  {
+    moduleId: 'time-swing',
+    label: 'Swing & Shuffle',
+    hint: 'Jeden zweiten 16tel-Schritt verzögern – federnder Groove',
+    create: (prefix) => createSwingOperatorConfig(prefix),
+  },
+  {
+    moduleId: 'time-euclid',
+    label: 'Euklidischer Rhythmus',
+    hint: 'k Schläge gleichmäßig auf n Steps verteilen (Tresillo, Clave, Bossa …)',
+    create: (prefix) => createEuclidOperatorConfig(prefix),
+  },
+  {
+    moduleId: 'time-chance',
+    label: 'Zufall & Ghost-Notes',
+    hint: 'Gewürfelte, wiederholbare Auslassungen und leise Geisternoten',
+    create: (prefix) => createChanceOperatorConfig(prefix),
+  },
+];
+
+/** Fügt einen Operator an seiner musikalisch richtigen Position in die Kette ein. */
+export function insertTimeOperator(
+  ops: readonly OperatorConfig[],
+  op: OperatorConfig,
+): OperatorConfig[] {
+  if (ops.some((o) => o.moduleId === op.moduleId)) return [...ops];
+  const rank = (id: string) => {
+    const r = TIME_OPERATOR_ORDER.indexOf(id);
+    return r < 0 ? TIME_OPERATOR_ORDER.length : r;
+  };
+  const myRank = rank(op.moduleId);
+  const idx = ops.findIndex((o) => rank(o.moduleId) > myRank);
+  const out = [...ops];
+  if (idx < 0) out.push(op);
+  else out.splice(idx, 0, op);
+  return out;
 }
 
 /** Euclidean rhythm operator config (bypassed by default for new layers). */
@@ -268,7 +359,7 @@ export function createDefaultLayer(
   };
 }
 
-function updateOperator(
+export function updateOperator(
   ops: readonly OperatorConfig[],
   moduleId: string,
   patch: { bypassed?: boolean; params?: Record<string, number> },
@@ -284,7 +375,7 @@ function updateOperator(
   );
 }
 
-function updateCard(
+export function updateCard(
   chain: readonly ProcessorCardConfig[],
   moduleId: string,
   patch: { bypassed?: boolean; params?: Record<string, number> },
@@ -300,7 +391,7 @@ function updateCard(
   );
 }
 
-function findCardId(chain: readonly ProcessorCardConfig[], moduleId: string): string {
+export function findCardId(chain: readonly ProcessorCardConfig[], moduleId: string): string {
   return chain.find((c) => c.moduleId === moduleId)?.id ?? '';
 }
 

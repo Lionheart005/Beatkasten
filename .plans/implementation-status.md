@@ -68,6 +68,12 @@
 - [x] **WP-23 (`gemini-4-hydrogen-medium`)**: Bugfix für `Dauerton = 0` (echte rhythmische Pausen in den Wellentälern statt ungewolltem Dauerklang in `PipeOrganVoice.ts`, `ChordArpVoice.ts` und `SubMotionVoice.ts`), `-0`-Slope-Fix in `operators.ts`, Worklet-Cache-Busting in `AudioBridge.ts` sowie Start-Anleitung in `Kontext.txt` (**30/30 Vitest-Tests**).
 - [x] **WP-24 (`gemini-4-hydrogen-medium`)**: Modulierbare Layer-Lautstärke (`Pegel` / `level`) & Layer-Panorama (`Pan` / `pan`) über `targetDomain: 'voice'`, `targetCardId: 'layer-mix'` in `LayerEngine.ts` (zero-alloc Subblock-Smoothing), `LayerStackPanel.tsx` (`~`-Buttons neben `Pegel` & `Pan`), `CurveDrawCanvas.tsx` (`Ziel-Regler`-Dropdown), `ModulationDrawer.tsx` & `SchemaControl.tsx` (**31/31 Vitest-Tests**).
 
+### Welle 9 (Abgeschlossen, Claude Opus 5.5 direkt): Neue Instrumente, Groove, Song-Kette & Demo-Song ([`09-neue-instrumente-und-song.md`](./09-neue-instrumente-und-song.md))
+- [x] Voices `metal-hat`, `clap-snare`, `acid-line`, `noise-riser`; gemeinsamer Melodie-Generator (`theory/melody.ts`) für Glocke, Orgel, Acid.
+- [x] Zeit-Operatoren `time-swing` (Swing & Shuffle) und `time-chance` (Zufall & Ghost-Notes).
+- [x] Song-Kette-Export, Wiedergabe-Stopp beim Export, aktiver Abschnitt + Auto-Sync + Verschieben + Layer-Kopie aus Abschnitten (Punkte aus `verbesserungen.txt`).
+- [x] Demo-Song „Nachtschicht“ (Projektordner + WAV/MP3 + Preset-Chip), **55/55 Vitest-Tests**, `vite build` ✓.
+
 ## 4. Gefundene Fehler, Probleme & Wichtige Erkenntnisse
 - **Ursache für unregelmäßigen `Four-on-the-Floor` (gelöst in WP-10/WP-11)**: `interferenceEnergy` verwendete vorher `Math.sin` (startete auf der Zählzeit bei `0.5` unipolar statt auf dem Gipfel `1.0`), `time-pulse-interference` feuerte teils doppelt (`crossedThreshold` + `steppedInEnergy`) und `Four-on-the-Floor` mischte `freqB = 1` (`0.2`) + `threshold = 0.52` + `gravity = 0.9` ein. Durch Cosinus-Ausrichtung, analytische Wellenkamm-Erkennung (`pulseSlope`), `0`-Defaults und sauberes Preset läuft `Four-on-the-Floor` jetzt exakt auf Beat 1, 2, 3, 4.
 - **Umgebungs-Check (15.11.2026)**: `node` v26.9.0 & `npm` 12.2.0 installiert; `git` mit Initial-Commit (`048322d`) eingerichtet.

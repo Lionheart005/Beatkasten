@@ -2,6 +2,7 @@ import { defaultRegistry } from '../defaultRegistry';
 import { clamp, sanitizeSampleRate } from '../dsp/smoothing';
 import { ModuleRegistry } from '../registry/ModuleRegistry';
 import { type BeatSnapshot } from '../state/types';
+import { computeFullRepeatBars } from './cycleMath';
 import { TechnoEngine } from './TechnoEngine';
 
 const OFFLINE_CHUNK_SIZE = 1024;
@@ -123,6 +124,105 @@ export function renderOfflineLoop(
     sampleRate,
     numSamples: loopSamples,
     durationSeconds: loopSamples / sampleRate,
+  };
+}
+
+export interface SongChainPart {
+  readonly snapshot: BeatSnapshot;
+  readonly bars: number;
+  readonly name?: string;
+}
+
+export interface SongChainRenderOptions {
+  readonly sampleRate?: number;
+  readonly preRollBars?: number;
+  /** Extra Takte am Ende, in denen Hall & Echo ausklingen (Klang des letzten Abschnitts läuft leise aus). */
+  readonly tailBars?: number;
+  readonly registry?: ModuleRegistry;
+}
+
+/**
+ * Renders all song sections back to back with ONE continuous engine: at every
+ * section boundary the next snapshot is applied (built-in ~15 ms crossfade),
+ * so reverb/echo tails and the bar grid run straight through like a live set.
+ */
+export function renderSongChain(
+  parts: readonly SongChainPart[],
+  options: SongChainRenderOptions = {},
+): RenderedAudioBuffer & { readonly partStartSamples: readonly number[] } {
+  const valid = parts.filter((p) => p && p.snapshot && Number.isFinite(p.bars) && p.bars > 0);
+  if (valid.length === 0) throw new Error('Song-Kette ist leer (keine Abschnitte mit Takten).');
+  const sampleRate = sanitizeSampleRate(options.sampleRate ?? 48000);
+  const registry = options.registry ?? defaultRegistry;
+  const preRollBars = Math.max(0, options.preRollBars ?? 0);
+  const tailBars = Math.max(0, options.tailBars ?? 0);
+
+  const partSamples = valid.map((p) => Math.max(1, Math.round(p.bars * computeBarSamples(p.snapshot, sampleRate))));
+  const firstBar = computeBarSamples(valid[0]!.snapshot, sampleRate);
+  const lastBar = computeBarSamples(valid[valid.length - 1]!.snapshot, sampleRate);
+  const tailSamples = Math.round(tailBars * lastBar);
+  const total = partSamples.reduce((a, b) => a + b, 0) + tailSamples;
+
+  const engine = new TechnoEngine(sampleRate, registry, OFFLINE_CHUNK_SIZE);
+  engine.reset();
+  engine.applySnapshot(valid[0]!.snapshot);
+  const chunkL = new Float32Array(OFFLINE_CHUNK_SIZE);
+  const chunkR = new Float32Array(OFFLINE_CHUNK_SIZE);
+
+  if (preRollBars > 0) {
+    // Der Song soll (musikalisch) bei Takt 1 beginnen: Vorlauf so starten, dass er
+    // auf einem gemeinsamen Vielfachen aller Zyklen des 1. Abschnitts (und 64 Takten) endet.
+    const beatsPerBar = firstBar / ((60 / clamp(valid[0]!.snapshot.tempoBpm, 20, 300)) * sampleRate);
+    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+    const rep = Math.max(1, Math.round(computeFullRepeatBars(valid[0]!.snapshot)));
+    const alignBars = (rep * 64) / gcd(rep, 64);
+    const startBars = Math.ceil(preRollBars / alignBars) * alignBars;
+    engine.seekToBeat((startBars - preRollBars) * beatsPerBar);
+    let remaining = Math.round(preRollBars * firstBar);
+    while (remaining > 0) {
+      const n = Math.min(OFFLINE_CHUNK_SIZE, remaining);
+      engine.processBlock(chunkL, chunkR, n);
+      remaining -= n;
+    }
+  }
+
+  const left = new Float32Array(total);
+  const right = new Float32Array(total);
+  const partStartSamples: number[] = [];
+  let written = 0;
+  for (let p = 0; p < valid.length; p++) {
+    if (p > 0) engine.applySnapshot(valid[p]!.snapshot);
+    partStartSamples.push(written);
+    const end = written + partSamples[p]!;
+    while (written < end) {
+      const n = Math.min(OFFLINE_CHUNK_SIZE, end - written);
+      engine.processBlock(chunkL, chunkR, n);
+      left.set(chunkL.subarray(0, n), written);
+      right.set(chunkR.subarray(0, n), written);
+      written += n;
+    }
+  }
+  // Ausklang: letzter Abschnitt läuft weiter, wird aber sanft ausgeblendet.
+  const tailStart = written;
+  while (written < total) {
+    const n = Math.min(OFFLINE_CHUNK_SIZE, total - written);
+    engine.processBlock(chunkL, chunkR, n);
+    for (let i = 0; i < n; i++) {
+      const t = (written + i - tailStart) / Math.max(1, tailSamples);
+      const g = Math.cos(Math.min(1, t) * Math.PI * 0.5);
+      left[written + i] = chunkL[i]! * g * g;
+      right[written + i] = chunkR[i]! * g * g;
+    }
+    written += n;
+  }
+
+  return {
+    left,
+    right,
+    sampleRate,
+    numSamples: total,
+    durationSeconds: total / sampleRate,
+    partStartSamples,
   };
 }
 

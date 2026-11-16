@@ -169,6 +169,11 @@ export function App() {
           sections={store.project.sections}
           sectionSwitchMode={store.sectionSwitchMode}
           pendingSectionId={store.pendingSectionId}
+          activeSectionId={store.activeSectionId}
+          autoSyncSection={store.autoSyncSection}
+          onSetAutoSyncSection={store.setAutoSyncSection}
+          onMoveSection={store.moveSection}
+          onCopyLayerFromSection={store.copyLayerFromSection}
           historyNodes={store.project.historyNodes}
           activeHistoryNodeId={store.project.activeHistoryNodeId}
           compareNodeId={store.compareNodeId}
@@ -197,6 +202,11 @@ export function App() {
         snapshot={store.snapshot}
         fsConnected={store.fsConnected}
         fsAdapter={store.fsAdapter}
+        sections={store.project.sections}
+        isPlaying={store.isPlaying}
+        onStopPlayback={async () => {
+          if (store.isPlaying) await store.togglePlay();
+        }}
         onClose={() => setIsExportOpen(false)}
         onNotice={store.showNotice}
       />

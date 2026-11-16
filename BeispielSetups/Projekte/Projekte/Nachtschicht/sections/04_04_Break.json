@@ -1,0 +1,2198 @@
+{
+  "id": "ns_sec_break",
+  "name": "04 Break",
+  "color": "#a855f7",
+  "exportBars": 16,
+  "notes": "Ohne Kick: Orgel, Glocken, Snare-Wirbel & Riser",
+  "snapshot": {
+    "id": "snap_ns_sec_break",
+    "tempoBpm": 128,
+    "timeSignature": {
+      "numerator": 4,
+      "denominator": 4
+    },
+    "masterGain": 0.88,
+    "masterGlue": 0.3,
+    "harmony": {
+      "rootNote": 2,
+      "scaleId": "natural_minor",
+      "chordPreset": "minor7",
+      "progressionId": "static",
+      "progressionMode": "custom",
+      "customSteps": [
+        {
+          "id": "ns_ch_1",
+          "degree": 0,
+          "accidental": 0,
+          "chordType": "auto",
+          "durationBeats": 8,
+          "transitionType": "crossfade",
+          "transitionBeats": 0.5
+        },
+        {
+          "id": "ns_ch_2",
+          "degree": 5,
+          "accidental": 0,
+          "chordType": "auto",
+          "durationBeats": 8,
+          "transitionType": "crossfade",
+          "transitionBeats": 0.5
+        },
+        {
+          "id": "ns_ch_3",
+          "degree": 2,
+          "accidental": 0,
+          "chordType": "auto",
+          "durationBeats": 8,
+          "transitionType": "crossfade",
+          "transitionBeats": 0.5
+        },
+        {
+          "id": "ns_ch_4",
+          "degree": 6,
+          "accidental": 0,
+          "chordType": "auto",
+          "durationBeats": 8,
+          "transitionType": "crossfade",
+          "transitionBeats": 0.5
+        }
+      ],
+      "voiceLeadingEnabled": true
+    },
+    "curves": [],
+    "layers": [
+      {
+        "id": "ns_kick",
+        "name": "Kick 4/4",
+        "color": "#ff6b4a",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 0.88,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_1_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "pulse-texture",
+          "version": 1,
+          "params": {
+            "bodyAir": 0.1,
+            "punchDrop": 0.78,
+            "decay": 0.34,
+            "snap": 0.62,
+            "pitchOffset": 0,
+            "toneColor": 0.24
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_1_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.5,
+              "focus": 0.18,
+              "filterMode": 0,
+              "tilt": -0.15
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.22,
+              "wavefold": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 2.5,
+              "midDb": -1.5,
+              "highDb": -1,
+              "stereoOrbit": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_1_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Drums"
+      },
+      {
+        "id": "ns_hats",
+        "name": "Hats 16tel (Swing)",
+        "color": "#facc15",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.5,
+        "pan": 0.1,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_2_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "swingAmount": 0.14,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 16,
+              "freqB": 16,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "chance": 0.4,
+              "ghost": 0.65,
+              "humanize": 0.4,
+              "chanceSeed": 5,
+              "chanceLoop": 2,
+              "protectDownbeat": 0
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "metal-hat",
+          "version": 1,
+          "params": {
+            "openness": 0.05,
+            "tone": 0.62,
+            "metalNoise": 0.55,
+            "tune": 0,
+            "dynamics": 0.75,
+            "width": 0.45
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_2_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.97,
+              "focus": 0.15,
+              "filterMode": 0,
+              "tilt": 0.15
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.06,
+              "wavefold": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0.02
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -8,
+              "midDb": -1,
+              "highDb": 1,
+              "stereoOrbit": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_2_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Drums"
+      },
+      {
+        "id": "ns_ohat",
+        "name": "Offene Hat (Offbeat)",
+        "color": "#fb923c",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 0.7,
+        "pan": -0.12,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_3_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 8,
+              "euclidHits": 4,
+              "euclidRotation": 1,
+              "euclidGate": 0.6,
+              "euclidAccent": 0,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "metal-hat",
+          "version": 1,
+          "params": {
+            "openness": 0.4,
+            "tone": 0.55,
+            "metalNoise": 0.42,
+            "tune": -2,
+            "dynamics": 0.2,
+            "width": 0.6
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_3_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.92,
+              "focus": 0.15,
+              "filterMode": 0,
+              "tilt": 0.1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.04,
+              "wavefold": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -9,
+              "midDb": -1,
+              "highDb": 0.5,
+              "stereoOrbit": 1.1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_3_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.12,
+              "size": 0.45,
+              "decay": 0.4,
+              "brightness": 0.6,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Drums"
+      },
+      {
+        "id": "ns_clap",
+        "name": "Clap 2 & 4",
+        "color": "#f472b6",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 0.95,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_4_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 4,
+              "euclidHits": 2,
+              "euclidRotation": 1,
+              "euclidGate": 0.5,
+              "euclidAccent": 0,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "clap-snare",
+          "version": 1,
+          "params": {
+            "clapSnare": 0.3,
+            "tone": 0.55,
+            "decay": 0.3,
+            "spread": 0.5,
+            "bodyTune": 0,
+            "snappy": 0.5,
+            "width": 0.5
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_4_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.86,
+              "focus": 0.2,
+              "filterMode": 0,
+              "tilt": 0.05
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -6,
+              "midDb": 0.5,
+              "highDb": 0.5,
+              "stereoOrbit": 0.8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_4_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.24,
+              "size": 0.52,
+              "decay": 0.48,
+              "brightness": 0.5,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Drums"
+      },
+      {
+        "id": "ns_roll",
+        "name": "Snare-Wirbel (Aufbau)",
+        "color": "#e879f9",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.42,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_a_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 9,
+              "euclidRotation": 0,
+              "euclidGate": 0.4,
+              "euclidAccent": 0.2,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "clap-snare",
+          "version": 1,
+          "params": {
+            "clapSnare": 0.85,
+            "tone": 0.6,
+            "decay": 0.14,
+            "spread": 0.2,
+            "bodyTune": 2,
+            "snappy": 0.7,
+            "width": 0.35
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_a_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.88,
+              "focus": 0.2,
+              "filterMode": 0,
+              "tilt": 0.1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -7,
+              "midDb": 0,
+              "highDb": 0.5,
+              "stereoOrbit": 0.7
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_a_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.2,
+              "size": 0.5,
+              "decay": 0.42,
+              "brightness": 0.5,
+              "duckAmount": 0.3
+            }
+          }
+        ],
+        "modulations": [
+          {
+            "id": "ns_mod_roll_hits",
+            "label": "Wirbel verdichtet sich (16 Takte)",
+            "enabled": true,
+            "sourceType": "wave-lfo",
+            "sourceConfig": {
+              "waveform": "ramp-up",
+              "cycleValue": 16,
+              "cycleUnit": "bars",
+              "phaseOffset": 0
+            },
+            "targetDomain": "time",
+            "targetCardId": "layer_mwjnbc9cizk_a_time_euclid",
+            "targetParamId": "euclidHits",
+            "combineMode": "add",
+            "depth": 0.22
+          },
+          {
+            "id": "ns_mod_roll_level",
+            "label": "Wirbel wird lauter",
+            "enabled": true,
+            "sourceType": "wave-lfo",
+            "sourceConfig": {
+              "waveform": "ramp-up",
+              "cycleValue": 16,
+              "cycleUnit": "bars",
+              "phaseOffset": 0
+            },
+            "targetDomain": "voice",
+            "targetCardId": "layer-mix",
+            "targetParamId": "level",
+            "combineMode": "add",
+            "depth": 0.12
+          }
+        ],
+        "group": "Drums"
+      },
+      {
+        "id": "ns_bass",
+        "name": "Rollender Bass",
+        "color": "#38bdf8",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 0.92,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_5_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 12,
+              "euclidRotation": 3,
+              "euclidGate": 0.62,
+              "euclidAccent": 0.2,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "sub-motion",
+          "version": 1,
+          "params": {
+            "subWarmth": 0.74,
+            "phaseBite": 0.32,
+            "glide": 0.02,
+            "octaveShift": -1,
+            "autoDuck": 0.72,
+            "sustainHold": 0.3
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_5_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.42,
+              "focus": 0.3,
+              "filterMode": 0,
+              "tilt": -0.2
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.18,
+              "wavefold": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": 1,
+              "midDb": -1,
+              "highDb": -3,
+              "stereoOrbit": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_5_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Bass"
+      },
+      {
+        "id": "ns_acid",
+        "name": "Acid-Linie",
+        "color": "#a3e635",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 0.75,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_6_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 10,
+              "euclidRotation": 2,
+              "euclidGate": 0.7,
+              "euclidAccent": 0.3,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "acid-line",
+          "version": 1,
+          "params": {
+            "wave": 0.15,
+            "cutoff": 0.34,
+            "resonance": 0.74,
+            "envMod": 0.58,
+            "decay": 0.2,
+            "noteLength": 0.32,
+            "accent": 0.4,
+            "slide": 0.3,
+            "drive": 0.42,
+            "octaveShift": 0,
+            "melodyPattern": 10,
+            "melodyRange": 0.45,
+            "melodyRate": 1,
+            "melodyLength": 10,
+            "melodySeed": 23,
+            "melodyLeap": 0.35,
+            "melodyChordTones": 0.55,
+            "melodyRest": 0.12
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_6_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.88,
+              "focus": 0.2,
+              "filterMode": 0,
+              "tilt": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.1,
+              "wavefold": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -4,
+              "midDb": 0.5,
+              "highDb": 0,
+              "stereoOrbit": 0.5
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.16,
+              "division": 1,
+              "feedback": 0.35,
+              "darkening": 0.5,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_6_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.18,
+              "size": 0.55,
+              "decay": 0.6,
+              "brightness": 0.45,
+              "duckAmount": 0.5
+            }
+          }
+        ],
+        "modulations": [
+          {
+            "id": "ns_mod_acid_cutoff",
+            "label": "Acid öffnet sich (32 Takte)",
+            "enabled": true,
+            "sourceType": "wave-lfo",
+            "sourceConfig": {
+              "waveform": "ramp-up",
+              "cycleValue": 32,
+              "cycleUnit": "bars",
+              "phaseOffset": 0
+            },
+            "targetDomain": "voice",
+            "targetCardId": "voice",
+            "targetParamId": "cutoff",
+            "combineMode": "add",
+            "depth": 0.2
+          }
+        ],
+        "group": "Bass"
+      },
+      {
+        "id": "ns_stab",
+        "name": "Dub-Akkord-Stab",
+        "color": "#22c55e",
+        "enabled": true,
+        "muted": true,
+        "solo": false,
+        "level": 1.3,
+        "pan": 0.05,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_7_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 8,
+              "euclidHits": 3,
+              "euclidRotation": 1,
+              "euclidGate": 0.32,
+              "euclidAccent": 0.3,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "chord-arp",
+          "version": 1,
+          "params": {
+            "chordArpMorph": 0.04,
+            "arpSpeed": 2,
+            "arpPattern": 0,
+            "octaveSpread": 1,
+            "timbreShape": 0.48,
+            "detuneShimmer": 0.42,
+            "softness": 0.07,
+            "droneHold": 0
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_7_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.52,
+              "focus": 0.38,
+              "filterMode": 0,
+              "tilt": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.35,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -6,
+              "midDb": 0.5,
+              "highDb": 0,
+              "stereoOrbit": 1.2
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.3,
+              "division": 1,
+              "feedback": 0.52,
+              "darkening": 0.58,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_7_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.26,
+              "size": 0.66,
+              "decay": 0.66,
+              "brightness": 0.45,
+              "duckAmount": 0.6
+            }
+          }
+        ],
+        "modulations": [
+          {
+            "id": "ns_mod_stab_bright",
+            "label": "Stab atmet (8 Takte)",
+            "enabled": true,
+            "sourceType": "wave-lfo",
+            "sourceConfig": {
+              "waveform": "triangle",
+              "cycleValue": 8,
+              "cycleUnit": "bars",
+              "phaseOffset": 0
+            },
+            "targetDomain": "processor",
+            "targetCardId": "layer_mwjnbc9cizk_7_card_tone",
+            "targetParamId": "brightness",
+            "combineMode": "add",
+            "depth": 0.12
+          }
+        ],
+        "group": "Harmonie"
+      },
+      {
+        "id": "ns_pad",
+        "name": "Orgel-Fläche",
+        "color": "#a855f7",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.6,
+        "pan": 0,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_9_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "freqA": 1,
+              "freqB": 1,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "pipe-organ",
+          "version": 1,
+          "params": {
+            "register": 0.36,
+            "chiff": 0.08,
+            "tremolo": 0.34,
+            "release": 0.75,
+            "droneHold": 1,
+            "voiceMode": 2,
+            "octaveShift": 0,
+            "melodyPattern": 0
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_9_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.46,
+              "focus": 0.2,
+              "filterMode": 0,
+              "tilt": -0.05
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.35,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -5,
+              "midDb": 0,
+              "highDb": 0,
+              "stereoOrbit": 1.3
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_9_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.42,
+              "size": 0.82,
+              "decay": 0.8,
+              "brightness": 0.45,
+              "duckAmount": 0.4
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Harmonie"
+      },
+      {
+        "id": "ns_bell",
+        "name": "Glocken-Motiv",
+        "color": "#f59e0b",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.85,
+        "pan": -0.16,
+        "cycleLength": {
+          "value": 4,
+          "unit": "beats"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_8_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 2,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.4,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "modal-bell",
+          "version": 1,
+          "params": {
+            "material": 0.86,
+            "malletHardness": 0.55,
+            "decay": 0.85,
+            "shimmer": 0.4,
+            "octaveShift": 1,
+            "melodyPattern": 12,
+            "melodyRange": 0.55,
+            "melodyRate": 1,
+            "melodyLength": 0,
+            "melodySeed": 11,
+            "melodyLeap": 0.12,
+            "melodyChordTones": 0.6,
+            "melodyRest": 0.1
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_8_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 0.78,
+              "focus": 0.25,
+              "filterMode": 0,
+              "tilt": 0.15
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.2,
+              "wavefold": 0.06
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0.1,
+              "bodyCharacter": 0.35,
+              "sandDust": 0.04
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -6,
+              "midDb": 0,
+              "highDb": 1.5,
+              "stereoOrbit": 1.25
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.26,
+              "division": 1,
+              "feedback": 0.42,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_8_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.3,
+              "size": 0.7,
+              "decay": 0.7,
+              "brightness": 0.55,
+              "duckAmount": 0.55
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "Melodie"
+      },
+      {
+        "id": "ns_riser",
+        "name": "Rausch-Riser (16 Takte)",
+        "color": "#94a3b8",
+        "enabled": true,
+        "muted": false,
+        "solo": false,
+        "level": 0.75,
+        "pan": 0,
+        "cycleLength": {
+          "value": 16,
+          "unit": "bars"
+        },
+        "timeOperators": [
+          {
+            "id": "layer_mwjnbc9cizk_b_time_warp",
+            "moduleId": "time-warp",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warpAmount": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_time_gravity",
+            "moduleId": "time-grid-gravity",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "subdivisions": 4,
+              "phaseShift": 0,
+              "gravity": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_time_drift",
+            "moduleId": "time-phase-drift",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "driftSteps": 0,
+              "resetCycles": 8
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_time_swing",
+            "moduleId": "time-swing",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "swingAmount": 0.2,
+              "swingGrid": 4
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_time_interference",
+            "moduleId": "time-pulse-interference",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "freqA": 4,
+              "freqB": 4,
+              "interferenceMix": 0,
+              "phaseOffset": 0,
+              "threshold": 0,
+              "waveShape": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_time_euclid",
+            "moduleId": "time-euclid",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "euclidSteps": 16,
+              "euclidHits": 5,
+              "euclidRotation": 0,
+              "euclidGate": 0.5,
+              "euclidAccent": 0.35,
+              "euclidMode": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_time_chance",
+            "moduleId": "time-chance",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "chance": 0.8,
+              "ghost": 0.5,
+              "humanize": 0.3,
+              "chanceSeed": 3,
+              "chanceLoop": 2,
+              "protectDownbeat": 1
+            }
+          }
+        ],
+        "voice": {
+          "moduleId": "noise-riser",
+          "version": 1,
+          "params": {
+            "direction": 0,
+            "sweepRange": 0.8,
+            "tension": 0.62,
+            "resonance": 0.42,
+            "toneMix": 0.18,
+            "pulseGate": 0,
+            "width": 0.85
+          }
+        },
+        "processorChain": [
+          {
+            "id": "layer_mwjnbc9cizk_b_card_tone",
+            "moduleId": "card-tone-filter",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "brightness": 1,
+              "focus": 0.1,
+              "filterMode": 0,
+              "tilt": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_card_warmth",
+            "moduleId": "card-warmth-wavefold",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "warmthGrit": 0.05,
+              "wavefold": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_card_body",
+            "moduleId": "card-body-sand",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "bodyResonance": 0,
+              "bodyCharacter": 0.3,
+              "sandDust": 0
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_card_eq",
+            "moduleId": "card-eq-orbit",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "lowDb": -10,
+              "midDb": 0,
+              "highDb": 0,
+              "stereoOrbit": 1.3
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_card_echo",
+            "moduleId": "card-tempo-echo",
+            "version": 1,
+            "bypassed": true,
+            "params": {
+              "mix": 0.15,
+              "division": 1,
+              "feedback": 0.38,
+              "darkening": 0.45,
+              "pingPong": 1
+            }
+          },
+          {
+            "id": "layer_mwjnbc9cizk_b_card_hall",
+            "moduleId": "card-ducking-hall",
+            "version": 1,
+            "bypassed": false,
+            "params": {
+              "mix": 0.3,
+              "size": 0.75,
+              "decay": 0.7,
+              "brightness": 0.55,
+              "duckAmount": 0.3
+            }
+          }
+        ],
+        "modulations": [],
+        "group": "FX"
+      }
+    ]
+  }
+}

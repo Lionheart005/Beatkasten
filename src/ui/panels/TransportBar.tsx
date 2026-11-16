@@ -49,7 +49,8 @@ interface TransportBarProps {
       | 'hypnotic-aminor'
       | 'triplet-riddle'
       | 'chord-offbeat-arp'
-      | 'bells-organ',
+      | 'bells-organ'
+      | 'nachtschicht-song',
   ) => void;
   onConnectFolder: () => void;
   onOpenProjectModal: () => void;
@@ -415,6 +416,14 @@ export function TransportBar({
             title="4/4 Kick, Offbeat-Glockenspiel & kombinierte Orgelpipes"
           >
             Glocken & Orgel
+          </button>
+          <button
+            type="button"
+            className="preset-chip"
+            onClick={() => onApplyPreset('nachtschicht-song')}
+            title="Kompletter Demo-Song (D-Moll, 128 BPM, 6 Abschnitte): Hats, Clap, rollender Bass, Acid-Linie, Dub-Stab, Glocken-Motiv, Orgel-Break & Riser – als neues Projekt"
+          >
+            ★ Demo-Song „Nachtschicht“
           </button>
         </div>
 

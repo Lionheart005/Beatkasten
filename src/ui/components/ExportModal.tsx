@@ -6,7 +6,7 @@ import {
   type ExportResult,
 } from '../../audio-host';
 import { computeFullRepeatBars } from '../../core/engine/cycleMath';
-import type { BeatSnapshot } from '../../core/state/types';
+import type { BeatSnapshot, SectionItem } from '../../core/state/types';
 import type { BrowserFsAdapter } from '../../storage';
 
 interface ExportModalProps {
@@ -15,6 +15,10 @@ interface ExportModalProps {
   snapshot: BeatSnapshot;
   fsConnected: boolean;
   fsAdapter: BrowserFsAdapter;
+  sections?: readonly SectionItem[];
+  isPlaying?: boolean;
+  /** Stoppt die Live-Wiedergabe (Export rendert sonst parallel und ruckelt). */
+  onStopPlayback?: () => Promise<void> | void;
   onClose: () => void;
   onNotice: (msg: string) => void;
 }
@@ -45,9 +49,14 @@ export function ExportModal({
   snapshot,
   fsConnected,
   fsAdapter,
+  sections = [],
+  isPlaying = false,
+  onStopPlayback,
   onClose,
   onNotice,
 }: ExportModalProps) {
+  const [exportMode, setExportMode] = useState<'loop' | 'song'>('loop');
+  const [tailBars, setTailBars] = useState<number>(2);
   const [format, setFormat] = useState<ExportRequest['format']>('wav-24');
   const [bars, setBars] = useState<number>(8);
   const [preRollBars, setPreRollBars] = useState<number>(2);
@@ -58,7 +67,16 @@ export function ExportModal({
   const fullRepeatBars = useMemo(() => computeFullRepeatBars(snapshot), [snapshot]);
   const beatsPerBar =
     (snapshot.timeSignature.numerator || 4) * (4 / (snapshot.timeSignature.denominator || 4));
-  const durationSec = (bars * beatsPerBar * 60) / Math.max(20, snapshot.tempoBpm);
+  const songBars = sections.reduce((sum, s) => sum + Math.max(0, s.exportBars || 0), 0);
+  const songSec = sections.reduce((sum, s) => {
+    const bpb =
+      (s.snapshot.timeSignature.numerator || 4) * (4 / (s.snapshot.timeSignature.denominator || 4));
+    return sum + (Math.max(0, s.exportBars || 0) * bpb * 60) / Math.max(20, s.snapshot.tempoBpm);
+  }, 0);
+  const isSong = exportMode === 'song' && sections.length > 0;
+  const durationSec = isSong
+    ? songSec
+    : (bars * beatsPerBar * 60) / Math.max(20, snapshot.tempoBpm);
   const durationLabel = `${Math.floor(durationSec / 60)}:${String(
     Math.round(durationSec % 60),
   ).padStart(2, '0')} min`;
@@ -71,12 +89,21 @@ export function ExportModal({
     setLastResult(null);
 
     try {
+      if (isPlaying && onStopPlayback) await onStopPlayback();
       const request: ExportRequest = {
         snapshot,
         bars,
         preRollBars,
         sampleRate: 48000,
         format,
+        ...(isSong
+          ? {
+              songChain: sections
+                .filter((s) => s.exportBars > 0)
+                .map((s) => ({ snapshot: s.snapshot, bars: s.exportBars, name: s.name })),
+              tailBars,
+            }
+          : {}),
       };
       const result = await exportAudioAsync(request, projectName);
       setLastResult(result);
@@ -137,6 +164,55 @@ export function ExportModal({
         </div>
 
         <div className="modal-body">
+          <div className="preset-chips" style={{ flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`preset-chip${!isSong ? ' is-active' : ''}`}
+              onClick={() => setExportMode('loop')}
+            >
+              Aktueller Beat (Loop)
+            </button>
+            <button
+              type="button"
+              className={`preset-chip${isSong ? ' is-active' : ''}`}
+              disabled={sections.length === 0}
+              title={
+                sections.length === 0
+                  ? 'Erst Abschnitte (Sections) speichern'
+                  : 'Alle Abschnitte in ihrer Reihenfolge hintereinander rendern'
+              }
+              onClick={() => setExportMode('song')}
+            >
+              Ganzer Song ({sections.length} Abschnitte · {songBars} Takte)
+            </button>
+          </div>
+
+          {isSong && (
+            <div className="muted-note" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {sections.map((s, i) => (
+                <span key={s.id}>
+                  {i + 1}. {s.name} — {s.exportBars} Takte
+                  {s.exportBars <= 0 ? ' (wird übersprungen)' : ''}
+                </span>
+              ))}
+              <span>
+                Länge pro Abschnitt = „Export-Takte“ in der Abschnitts-Liste. Die Übergänge laufen
+                nahtlos (Hall & Echo klingen in den nächsten Abschnitt hinein).
+              </span>
+              <label style={{ fontSize: 12 }}>
+                Ausklang am Ende: {tailBars} Takte
+                <input
+                  type="range"
+                  min={0}
+                  max={8}
+                  step={1}
+                  value={tailBars}
+                  onChange={(e) => setTailBars(Number(e.target.value))}
+                />
+              </label>
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
               Format & Qualität
@@ -160,11 +236,15 @@ export function ExportModal({
             </select>
           </div>
 
+          {isSong && (
+            <div className="muted-note">Song-Länge ≈ {durationLabel}. Bei Stems wird im Song-Modus nur der Gesamtmix exportiert.</div>
+          )}
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: 10,
+              ...(isSong ? { opacity: 0.45, pointerEvents: 'none' as const } : {}),
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -284,7 +364,11 @@ export function ExportModal({
             disabled={isExporting}
           >
             <Download size={14} />
-            {isExporting ? 'Rendere Audio…' : 'Jetzt exportieren'}
+            {isExporting
+              ? 'Rendere Audio… (Wiedergabe pausiert)'
+              : isSong
+                ? 'Song exportieren'
+                : 'Jetzt exportieren'}
           </button>
         </div>
       </div>

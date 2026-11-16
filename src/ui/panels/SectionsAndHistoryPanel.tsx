@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   Bookmark,
   Copy,
+  Layers,
   GitBranch,
   Play,
   Plus,
@@ -18,6 +21,11 @@ interface SectionsAndHistoryPanelProps {
   sections: readonly SectionItem[];
   sectionSwitchMode: SectionSwitchMode;
   pendingSectionId: string | null;
+  activeSectionId?: string | null;
+  autoSyncSection?: boolean;
+  onSetAutoSyncSection?: (on: boolean) => void;
+  onMoveSection?: (sectionId: string, delta: number) => void;
+  onCopyLayerFromSection?: (sectionId: string, layerId: string) => void;
   historyNodes: readonly HistoryNode[];
   activeHistoryNodeId: string;
   compareNodeId: string | null;
@@ -97,6 +105,11 @@ export function SectionsAndHistoryPanel({
   abCompareActive,
   canUndo,
   canRedo,
+  activeSectionId = null,
+  autoSyncSection = false,
+  onSetAutoSyncSection,
+  onMoveSection,
+  onCopyLayerFromSection,
   onSetSectionSwitchMode,
   onTriggerSection,
   onSaveNewSection,
@@ -113,6 +126,7 @@ export function SectionsAndHistoryPanel({
 }: SectionsAndHistoryPanelProps) {
   const [newSectionName, setNewSectionName] = useState('');
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [copyFromSectionId, setCopyFromSectionId] = useState<string | null>(null);
   const [bookmarksOnly, setBookmarksOnly] = useState(false);
 
   const treeRows = useMemo(() => buildTreeRows(historyNodes), [historyNodes]);
@@ -184,15 +198,40 @@ export function SectionsAndHistoryPanel({
             <Plus size={12} /> Neu
           </button>
         </div>
+        {onSetAutoSyncSection && (
+          <label
+            className="muted-note"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+            title="Jede Änderung am Beat wird nach kurzer Pause automatisch im aktiven Abschnitt gespeichert."
+          >
+            <input
+              type="checkbox"
+              checked={autoSyncSection}
+              onChange={(e) => onSetAutoSyncSection(e.target.checked)}
+            />
+            Änderungen automatisch in den aktiven Abschnitt übernehmen
+          </label>
+        )}
 
         {sections.map((sec) => {
           const isPending = pendingSectionId === sec.id;
           const isEditing = editingSectionId === sec.id;
+          const isActive = activeSectionId === sec.id;
+          const secIdx = sections.indexOf(sec);
           return (
             <div
               key={sec.id}
-              className={`section-item${isPending ? ' is-pending' : ''}`}
-              style={{ borderLeftColor: sec.color }}
+              className={`section-item${isPending ? ' is-pending' : ''}${isActive ? ' is-active' : ''}`}
+              style={{
+                borderLeftColor: sec.color,
+                ...(isActive
+                  ? {
+                      borderLeftWidth: 4,
+                      background: 'rgba(56, 189, 248, 0.10)',
+                      boxShadow: `inset 0 0 0 1px ${sec.color}66`,
+                    }
+                  : {}),
+              }}
             >
               <div className="sub-card-head">
                 <button
@@ -233,9 +272,51 @@ export function SectionsAndHistoryPanel({
                       (wartet…)
                     </span>
                   )}
+                  {isActive && !isPending && (
+                    <span
+                      style={{ fontSize: 10, color: '#22c55e', marginLeft: 4, fontWeight: 700 }}
+                      title={autoSyncSection ? 'Aktiv – Änderungen werden automatisch übernommen' : 'Aktiv'}
+                    >
+                      ● aktiv{autoSyncSection ? ' · sync' : ''}
+                    </span>
+                  )}
                 </button>
 
                 <div style={{ display: 'flex', gap: 2 }}>
+                  {onMoveSection && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={secIdx <= 0}
+                        onClick={() => onMoveSection(sec.id, -1)}
+                        title="Abschnitt nach oben (früher im Song)"
+                      >
+                        <ArrowUp size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={secIdx >= sections.length - 1}
+                        onClick={() => onMoveSection(sec.id, 1)}
+                        title="Abschnitt nach unten (später im Song)"
+                      >
+                        <ArrowDown size={11} />
+                      </button>
+                    </>
+                  )}
+                  {onCopyLayerFromSection && (
+                    <button
+                      type="button"
+                      className={`btn-ghost btn-sm${copyFromSectionId === sec.id ? ' is-active' : ''}`}
+                      onClick={() =>
+                        setCopyFromSectionId(copyFromSectionId === sec.id ? null : sec.id)
+                      }
+                      title="Einzelne Layer aus diesem Abschnitt in den aktuellen Beat kopieren"
+                    >
+                      <Layers size={11} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn-ghost btn-sm"
@@ -273,9 +354,28 @@ export function SectionsAndHistoryPanel({
                 </div>
               </div>
 
-              {sec.notes && !isEditing && (
+              {!isEditing && (
                 <div className="muted-note">
-                  {sec.notes} · {sec.exportBars} Takte
+                  {sec.notes ? `${sec.notes} · ` : ''}
+                  {sec.exportBars} Takte · {sec.snapshot.layers.length} Layer
+                </div>
+              )}
+
+              {copyFromSectionId === sec.id && onCopyLayerFromSection && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 3 }}>
+                  <span className="muted-note">Layer in den aktuellen Beat kopieren:</span>
+                  {sec.snapshot.layers.map((l) => (
+                    <button
+                      key={l.id}
+                      type="button"
+                      className="btn-sm"
+                      style={{ justifyContent: 'flex-start', borderLeft: `3px solid ${l.color}` }}
+                      onClick={() => onCopyLayerFromSection(sec.id, l.id)}
+                      title="Kopie mit eigenen IDs anlegen (das Original bleibt unverändert)"
+                    >
+                      <Copy size={10} /> {l.name}
+                    </button>
+                  ))}
                 </div>
               )}
 
