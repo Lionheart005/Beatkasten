@@ -50,7 +50,8 @@ interface TransportBarProps {
       | 'triplet-riddle'
       | 'chord-offbeat-arp'
       | 'bells-organ'
-      | 'nachtschicht-song',
+      | 'nachtschicht-song'
+      | 'stahlwerk-song',
   ) => void;
   onConnectFolder: () => void;
   onOpenProjectModal: () => void;
@@ -424,6 +425,14 @@ export function TransportBar({
             title="Kompletter Demo-Song (D-Moll, 128 BPM, 6 Abschnitte): Hats, Clap, rollender Bass, Acid-Linie, Dub-Stab, Glocken-Motiv, Orgel-Break & Riser – als neues Projekt"
           >
             ★ Demo-Song „Nachtschicht“
+          </button>
+          <button
+            type="button"
+            className="preset-chip"
+            onClick={() => onApplyPreset('stahlwerk-song')}
+            title="Hardtechno-Demo (F-Phrygisch, 150 BPM, 4 Abschnitte): verzerrte Rumble-Kick, Industrie-Bass auf dem Offbeat, Acid-Kreischen, Reese-Break – als neues Projekt"
+          >
+            ★ Hardtechno „Stahlwerk“
           </button>
         </div>
 

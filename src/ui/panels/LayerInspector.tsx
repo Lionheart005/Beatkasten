@@ -1,4 +1,5 @@
-import { type CSSProperties, useEffect, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { loadLayoutPref, saveLayoutPref, Splitter } from '../components/Splitter';
 import {
   ArrowDown,
   ArrowUp,
@@ -283,6 +284,37 @@ export function LayerInspector({
   onUpsertCurveLive,
   onCreateCurve,
 }: LayerInspectorProps) {
+  // Breiten der drei Säulen (Anteile), per Maus veränderbar & gespeichert.
+  const [colFr, setColFr] = useState<number[]>(() => {
+    const v = loadLayoutPref<number[]>('inspectorCols', [1, 1, 1]);
+    return Array.isArray(v) && v.length === 3 && v.every((x) => Number.isFinite(x) && x > 0) ? v : [1, 1, 1];
+  });
+  const colsRef = useRef<HTMLDivElement | null>(null);
+  const dragStartFr = useRef<number[]>(colFr);
+  const startColDrag = useCallback(() => {
+    dragStartFr.current = colFr;
+  }, [colFr]);
+  const dragCol = useCallback((idx: number, deltaPx: number) => {
+    const el = colsRef.current;
+    const start = dragStartFr.current;
+    if (!el) return;
+    const usable = Math.max(200, el.clientWidth - 40);
+    const sum = start.reduce((a, b) => a + b, 0);
+    const deltaFr = (deltaPx / usable) * sum;
+    const minFr = sum * 0.12;
+    const pairSum = start[idx]! + start[idx + 1]!;
+    const a = Math.min(pairSum - minFr, Math.max(minFr, start[idx]! + deltaFr));
+    const next = [...start];
+    next[idx] = a;
+    next[idx + 1] = pairSum - a;
+    setColFr(next);
+    saveLayoutPref('inspectorCols', next);
+  }, []);
+  const resetCols = useCallback(() => {
+    setColFr([1, 1, 1]);
+    saveLayoutPref('inspectorCols', [1, 1, 1]);
+  }, []);
+
   const processors = defaultRegistry.listProcessors();
   const voices = defaultRegistry.listVoices();
   const [addCardModuleId, setAddCardModuleId] = useState<string>(
@@ -652,7 +684,13 @@ export function LayerInspector({
       </div>
 
       {/* 3 Columns */}
-      <div className="inspector-columns">
+      <div
+        className="inspector-columns is-resizable"
+        ref={colsRef}
+        style={{
+          gridTemplateColumns: `minmax(0, ${colFr[0]}fr) 10px minmax(0, ${colFr[1]}fr) 10px minmax(0, ${colFr[2]}fr)`,
+        }}
+      >
         {/* Säule 1: Zeit & Rhythmus (WANN) */}
         <div className="inspector-col">
           <div className="inspector-col-head">
@@ -761,6 +799,12 @@ export function LayerInspector({
           </div>
         </div>
 
+        <Splitter
+          direction="col"
+          onDragStart={startColDrag}
+          onDrag={(d) => dragCol(0, d)}
+          onReset={resetCols}
+        />
         {/* Säule 2: Klang & Drag-&-Drop Kartenkette (WIE ES KLINGT) */}
         <div className="inspector-col">
           <div className="inspector-col-head">
@@ -1029,6 +1073,12 @@ export function LayerInspector({
           </div>
         </div>
 
+        <Splitter
+          direction="col"
+          onDragStart={startColDrag}
+          onDrag={(d) => dragCol(1, d)}
+          onReset={resetCols}
+        />
         {/* Säule 3: Zeit bewegt Klang (~ Bewegungs-Anker & Kurven-Zeichner) */}
         <div className="inspector-col">
           <div className="inspector-col-head">

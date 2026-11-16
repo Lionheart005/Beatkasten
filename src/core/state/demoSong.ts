@@ -41,7 +41,7 @@ interface EuclidSpec {
   accent?: number;
 }
 
-function withEuclid(layer: LayerConfig, e: EuclidSpec): LayerConfig {
+export function withEuclid(layer: LayerConfig, e: EuclidSpec): LayerConfig {
   let ops = updateOperator(layer.timeOperators, 'time-pulse-interference', { bypassed: true });
   ops = updateOperator(ops, 'time-euclid', {
     bypassed: false,
@@ -57,7 +57,7 @@ function withEuclid(layer: LayerConfig, e: EuclidSpec): LayerConfig {
   return { ...layer, timeOperators: ops };
 }
 
-function withPulse(layer: LayerConfig, freqA: number): LayerConfig {
+export function withPulse(layer: LayerConfig, freqA: number): LayerConfig {
   return {
     ...layer,
     timeOperators: updateOperator(layer.timeOperators, 'time-pulse-interference', {
@@ -67,7 +67,7 @@ function withPulse(layer: LayerConfig, freqA: number): LayerConfig {
   };
 }
 
-function chain(
+export function chain(
   layer: LayerConfig,
   patches: Record<string, { bypassed?: boolean; params?: Record<string, number> }>,
 ): LayerConfig {
@@ -76,11 +76,11 @@ function chain(
   return { ...layer, processorChain: c };
 }
 
-function voice(layer: LayerConfig, params: Record<string, number>): LayerConfig {
+export function voice(layer: LayerConfig, params: Record<string, number>): LayerConfig {
   return { ...layer, voice: { ...layer.voice, params: { ...layer.voice.params, ...params } } };
 }
 
-function base(
+export function base(
   id: string,
   name: string,
   voiceId: string,
@@ -93,7 +93,7 @@ function base(
   return { ...l, id, color, group };
 }
 
-function lfo(
+export function lfo(
   id: string,
   label: string,
   targetDomain: ModulationRouteConfig['targetDomain'],

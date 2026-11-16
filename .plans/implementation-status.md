@@ -74,6 +74,10 @@
 - [x] Song-Kette-Export, Wiedergabe-Stopp beim Export, aktiver Abschnitt + Auto-Sync + Verschieben + Layer-Kopie aus Abschnitten (Punkte aus `verbesserungen.txt`).
 - [x] Demo-Song „Nachtschicht“ (Projektordner + WAV/MP3 + Preset-Chip), **55/55 Vitest-Tests**, `vite build` ✓.
 
+### Welle 10 (Abgeschlossen): Harte Bässe, Hardtechno-Demo & ziehbare Fenster ([`10-harte-baesse-und-layout.md`](./10-harte-baesse-und-layout.md))
+- [x] Voices `hard-kick`, `reese-bass`, `fm-bass`; `sub-motion` + Verzerrung/Ton-Wahl/Tempo-Fix; `HarmonyFrame.keyRootMidi`.
+- [x] Demo „Stahlwerk“ (150 BPM) + Preset-Chip; Splitter für alle Hauptfenster; lesbare Layer-Namen. **61/61 Tests**, Build ✓.
+
 ## 4. Gefundene Fehler, Probleme & Wichtige Erkenntnisse
 - **Ursache für unregelmäßigen `Four-on-the-Floor` (gelöst in WP-10/WP-11)**: `interferenceEnergy` verwendete vorher `Math.sin` (startete auf der Zählzeit bei `0.5` unipolar statt auf dem Gipfel `1.0`), `time-pulse-interference` feuerte teils doppelt (`crossedThreshold` + `steppedInEnergy`) und `Four-on-the-Floor` mischte `freqB = 1` (`0.2`) + `threshold = 0.52` + `gravity = 0.9` ein. Durch Cosinus-Ausrichtung, analytische Wellenkamm-Erkennung (`pulseSlope`), `0`-Defaults und sauberes Preset läuft `Four-on-the-Floor` jetzt exakt auf Beat 1, 2, 3, 4.
 - **Umgebungs-Check (15.11.2026)**: `node` v26.9.0 & `npm` 12.2.0 installiert; `git` mit Initial-Commit (`048322d`) eingerichtet.

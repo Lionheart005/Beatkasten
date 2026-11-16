@@ -42,7 +42,7 @@ function stats(l: Float32Array, r: Float32Array) {
 }
 
 describe('neue Instrumente', () => {
-  for (const voiceId of ['metal-hat', 'clap-snare', 'acid-line', 'noise-riser']) {
+  for (const voiceId of ['metal-hat', 'clap-snare', 'acid-line', 'noise-riser', 'hard-kick', 'reese-bass', 'fm-bass']) {
     it(`${voiceId} klingt, bleibt endlich und übersteuert nicht`, () => {
       const layer = createDefaultLayer(`Test ${voiceId}`, voiceId, 4, 'beats');
       const out = renderOfflineLoop(snapshotWith([layer]), { bars: 2, sampleRate: 44100 });
@@ -135,4 +135,41 @@ describe('Song-Kette & Demo-Song', () => {
     const ids = sections.map((sec) => sec.snapshot.layers.map((l) => l.id).join(','));
     expect(new Set(ids).size).toBe(1);
   }, 60000);
+});
+
+describe('harte Bässe', () => {
+  it('alle Verzerrungs-Arten bleiben endlich und unter 0 dBFS', () => {
+    for (const voiceId of ['hard-kick', 'fm-bass', 'reese-bass']) {
+      for (const distMode of [0, 1, 2, 3, 4]) {
+        const b = createDefaultLayer('D', voiceId, 4, 'beats');
+        const layer: LayerConfig = {
+          ...b,
+          voice: { ...b.voice, params: { ...b.voice.params, distMode, drive: 1, distortion: 1, wobbleRate: 4 } },
+        };
+        const out = renderOfflineLoop(snapshotWith([layer]), { bars: 1, sampleRate: 22050 });
+        const s = stats(out.left, out.right);
+        expect(s.finite).toBe(true);
+        expect(s.peak).toBeLessThan(1.05);
+        expect(s.rms).toBeGreaterThan(0.005);
+      }
+    }
+  });
+
+  it('Sub-Bewegung: Verzerrung & Ton-Wahl funktionieren', () => {
+    const b = createDefaultLayer('S', 'sub-motion', 4, 'beats');
+    for (const bassLine of [0, 1, 2, 3]) {
+      const layer: LayerConfig = { ...b, voice: { ...b.voice, params: { ...b.voice.params, drive: 0.8, bassLine } } };
+      const out = renderOfflineLoop(snapshotWith([layer]), { bars: 1, sampleRate: 22050 });
+      const s = stats(out.left, out.right);
+      expect(s.finite).toBe(true);
+      expect(s.rms).toBeGreaterThan(0.005);
+    }
+  });
+
+  it('Hardtechno-Demo hat 4 Abschnitte à 16 Takte mit 150 BPM', async () => {
+    const { createHardtechnoSections } = await import('../../src/core/state');
+    const secs = createHardtechnoSections();
+    expect(secs.map((x) => x.exportBars)).toEqual([16, 16, 16, 16]);
+    expect(secs.every((x) => x.snapshot.tempoBpm === 150)).toBe(true);
+  });
 });

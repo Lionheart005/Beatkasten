@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadLayoutPref, saveLayoutPref, Splitter } from './components/Splitter';
 import { ExportModal } from './components/ExportModal';
 import { PhaseRadarCanvas } from './components/PhaseRadarCanvas';
 import { ProjectModal } from './components/ProjectModal';
@@ -15,6 +16,34 @@ export function App() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isHarmonyBuilderOpen, setIsHarmonyBuilderOpen] = useState(false);
+
+  // Fenstergrößen (per Maus ziehbar, im Browser gespeichert)
+  const DEFAULT_LAYOUT = { left: 290, right: 320, visual: 0 };
+  const [layout, setLayout] = useState<{ left: number; right: number; visual: number }>(() => {
+    const v = loadLayoutPref('main', DEFAULT_LAYOUT);
+    return {
+      left: Number.isFinite(v.left) ? v.left : DEFAULT_LAYOUT.left,
+      right: Number.isFinite(v.right) ? v.right : DEFAULT_LAYOUT.right,
+      visual: Number.isFinite(v.visual) ? v.visual : 0,
+    };
+  });
+  const layoutStart = useRef(layout);
+  const visualRef = useRef<HTMLElement | null>(null);
+  const updateLayout = useCallback((patch: Partial<typeof layout>) => {
+    setLayout((prev) => {
+      const next = { ...prev, ...patch };
+      saveLayoutPref('main', next);
+      return next;
+    });
+  }, []);
+  const beginLayoutDrag = useCallback(() => {
+    setLayout((prev) => {
+      // visual = 0 heißt „automatische Höhe“ → beim ersten Ziehen echte Höhe übernehmen
+      const measured = visualRef.current?.getBoundingClientRect().height ?? 150;
+      layoutStart.current = { ...prev, visual: prev.visual > 0 ? prev.visual : measured };
+      return prev;
+    });
+  }, []);
 
   // Global keyboard shortcuts: Ctrl+Z (Undo), Ctrl+Y / Ctrl+Shift+Z (Redo)
   useEffect(() => {
@@ -79,7 +108,11 @@ export function App() {
       />
 
       {/* Visual Center: Phase Radar + Layer Wave Preview */}
-      <section className="visual-center">
+      <section
+        className="visual-center"
+        ref={visualRef}
+        style={layout.visual > 0 ? { height: layout.visual, overflow: 'hidden' } : undefined}
+      >
         <PhaseRadarCanvas
           layers={store.snapshot.layers}
           beatsPerBar={store.snapshot.timeSignature.numerator}
@@ -109,6 +142,16 @@ export function App() {
         </div>
       </section>
 
+      <Splitter
+        direction="row"
+        title="Ziehen = obere Anzeige größer/kleiner · Doppelklick = automatische Höhe"
+        onDragStart={beginLayoutDrag}
+        onDrag={(d) =>
+          updateLayout({ visual: Math.max(36, Math.min(420, layoutStart.current.visual + d)) })
+        }
+        onReset={() => updateLayout({ visual: 0 })}
+      />
+
       {isHarmonyBuilderOpen && (
         <HarmonyBuilderPanel
           snapshot={store.snapshot}
@@ -120,7 +163,12 @@ export function App() {
       )}
 
       {/* Main 3-Area Workspace */}
-      <main className="studio-workspace">
+      <main
+        className="studio-workspace is-resizable"
+        style={{
+          gridTemplateColumns: `${layout.left}px 10px minmax(0, 1fr) 10px ${layout.right}px`,
+        }}
+      >
         <LayerStackPanel
           layers={store.snapshot.layers}
           selectedLayerId={store.selectedLayerId}
@@ -137,6 +185,16 @@ export function App() {
           onSetLayerGroup={store.setLayerGroup}
           onRenameGroup={store.renameLayerGroup}
           onToggleGroupFlag={store.toggleGroupFlag}
+        />
+
+        <Splitter
+          direction="col"
+          title="Ziehen = Layer-Liste breiter/schmaler · Doppelklick = Standard"
+          onDragStart={beginLayoutDrag}
+          onDrag={(d) =>
+            updateLayout({ left: Math.max(200, Math.min(620, layoutStart.current.left + d)) })
+          }
+          onReset={() => updateLayout({ left: DEFAULT_LAYOUT.left })}
         />
 
         <LayerInspector
@@ -163,6 +221,16 @@ export function App() {
           onDeleteModulationRoute={store.deleteModulationRoute}
           onUpsertCurveLive={store.upsertCurveLive}
           onCreateCurve={store.createCurve}
+        />
+
+        <Splitter
+          direction="col"
+          title="Ziehen = Abschnitte/History breiter/schmaler · Doppelklick = Standard"
+          onDragStart={beginLayoutDrag}
+          onDrag={(d) =>
+            updateLayout({ right: Math.max(220, Math.min(640, layoutStart.current.right - d)) })
+          }
+          onReset={() => updateLayout({ right: DEFAULT_LAYOUT.right })}
         />
 
         <SectionsAndHistoryPanel

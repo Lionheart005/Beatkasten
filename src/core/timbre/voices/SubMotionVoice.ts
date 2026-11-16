@@ -12,6 +12,7 @@ import {
   type VoiceRenderContext,
 } from '../../registry/types';
 import { midiToFreq } from '../../theory';
+import { BeatTracker, distort } from './voiceUtils';
 
 const TWO_PI = Math.PI * 2;
 
@@ -98,6 +99,37 @@ const SUSTAIN_HOLD_PARAM: ParameterSchema = {
 
 const STEP_DEGREE_OFFSETS = [0, 0, 2, 0, 4, 0, 1, 3] as const;
 
+const DRIVE_PARAM: ParameterSchema = {
+  id: 'drive',
+  label: 'Verzerrung (hart)',
+  description: '0 = sauberer, runder Sub. Mehr = angezerrt bis brutal geclippt – für harten, dreckigen Techno-Bass.',
+  domain: 'timbre',
+  min: 0,
+  max: 1,
+  defaultValue: 0,
+  curve: 'linear',
+  modulatable: true,
+};
+
+const BASS_LINE_PARAM: ParameterSchema = {
+  id: 'bassLine',
+  label: 'Ton-Wahl',
+  description: 'Automatisch = wandert leicht durch die Tonleiter (bisher). Fest = immer der Akkord-Grundton. Pendel = wechselt pro Schlag zur Oktave bzw. Quinte.',
+  domain: 'harmony',
+  min: 0,
+  max: 3,
+  step: 1,
+  defaultValue: 0,
+  curve: 'linear',
+  modulatable: false,
+  options: [
+    { value: 0, label: 'Automatisch (Skala)' },
+    { value: 1, label: 'Fest auf dem Grundton' },
+    { value: 2, label: 'Grundton ↔ Oktave' },
+    { value: 3, label: 'Grundton ↔ Quinte' },
+  ],
+};
+
 function readParam(schema: ParameterSchema, params: Record<string, number>): number {
   const raw = params[schema.id];
   const candidate = raw !== undefined && Number.isFinite(raw) ? raw : schema.defaultValue;
@@ -168,6 +200,8 @@ export class SubMotionVoice implements VoiceInstance {
   private lastTargetMidi = Number.NaN;
   private cachedTargetHz = 55;
   private readonly biteBuf = new Float32Array(8);
+  private beatTracker: BeatTracker | null = null;
+  private lineCounter = 0;
 
   constructor(sampleRate: number) {
     this.sampleRate = sanitizeSampleRate(sampleRate);
@@ -192,6 +226,8 @@ export class SubMotionVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.lineCounter = 0;
+    this.beatTracker?.reset();
     this.subOsc.reset(0);
     this.warmOsc.reset(0);
     this.biteOsc.reset(0);
@@ -225,6 +261,10 @@ export class SubMotionVoice implements VoiceInstance {
     const octaveShift = Math.round(readParam(OCTAVE_SHIFT_PARAM, params));
     const autoDuck = readParam(AUTO_DUCK_PARAM, params);
     const sustainHold = readParam(SUSTAIN_HOLD_PARAM, params);
+    const drive = readParam(DRIVE_PARAM, params);
+    const bassLine = Math.round(readParam(BASS_LINE_PARAM, params));
+    if (!this.beatTracker) this.beatTracker = new BeatTracker(this.sampleRate);
+    const trackedBps = this.beatTracker.update(ctx);
 
     const glideMs = Math.max(2, glideSec * 1000);
     if (Math.abs(glideMs - this.lastGlideMs) > 0.05) {
@@ -248,15 +288,25 @@ export class SubMotionVoice implements VoiceInstance {
     const prevTrig = Number.isFinite(ctx.prevPulseTrigger) ? ctx.prevPulseTrigger : 0;
     if (trig > 0.01 && prevTrig <= 0.01) {
       this.trigBoost = Math.max(this.trigBoost, 0.35 * trig);
+      this.lineCounter++;
     }
 
     const rootMidi = Number.isFinite(ctx.harmony.rootMidi) ? ctx.harmony.rootMidi : 36;
-    const targetMidi = selectScaleBassMidi(
-      ctx.harmony.scaleNotesMidi,
-      rootMidi,
-      octaveShift,
-      ctx.timeFrame.stepIndex,
-    );
+    let targetMidi: number;
+    if (bassLine === 0) {
+      targetMidi = selectScaleBassMidi(
+        ctx.harmony.scaleNotesMidi,
+        rootMidi,
+        octaveShift,
+        ctx.timeFrame.stepIndex,
+      );
+    } else {
+      let b = rootMidi + octaveShift * 12;
+      while (b < 24) b += 12;
+      while (b > 72) b -= 12;
+      const odd = (this.lineCounter & 1) === 0;
+      targetMidi = bassLine === 2 && odd ? b + 12 : bassLine === 3 && odd ? b + 7 : b;
+    }
     if (targetMidi !== this.lastTargetMidi) {
       this.lastTargetMidi = targetMidi;
       this.cachedTargetHz = clamp(midiToFreq(targetMidi), 24, this.sampleRate * 0.25);
@@ -273,7 +323,8 @@ export class SubMotionVoice implements VoiceInstance {
 
     // Estimate beat advancement per sample (~128 BPM fallback if beatsPerBar is nominal)
     const baseBeat = Number.isFinite(ctx.beatPosition) ? ctx.beatPosition : 0;
-    const beatsPerSample = 2.133333 / this.sampleRate;
+    // echtes Tempo statt fester 128 BPM (Ducking sitzt jetzt auch bei 150 BPM auf dem Beat)
+    const beatsPerSample = trackedBps;
     const maxOscHz = this.sampleRate * 0.44;
 
     for (let start = 0; start < count; start += 8) {
@@ -356,7 +407,11 @@ export class SubMotionVoice implements VoiceInstance {
         const sawFiltered = biteBuf[k]!;
 
         const raw = sub * subGain + warm * warmGain + sawFiltered * biteGain;
-        const shaped = fastTanh(raw * driveGain);
+        const shaped =
+          drive > 0.001
+            ? fastTanh(raw * driveGain) * (1 - drive) +
+              distort(raw * driveGain * (1 + drive * 7), 1) * drive * 0.8
+            : fastTanh(raw * driveGain);
 
         const x = shaped * env * outScale;
         const y = x - dcX1 + dcCoeff * dcY1;
@@ -389,7 +444,7 @@ export const subMotionVoiceModule: VoiceModule = {
   version: 1,
   category: 'bass',
   displayName: 'Sub-Bewegung',
-  description: 'Warmer, skalen-gebundener Subbass mit weichem Glide und Beat-Ducking.',
+  description: 'Warmer, skalen-gebundener Subbass mit Glide, Beat-Ducking und zuschaltbarer harter Verzerrung.',
   parameters: [
     SUB_WARMTH_PARAM,
     PHASE_BITE_PARAM,
@@ -397,6 +452,8 @@ export const subMotionVoiceModule: VoiceModule = {
     OCTAVE_SHIFT_PARAM,
     AUTO_DUCK_PARAM,
     SUSTAIN_HOLD_PARAM,
+    DRIVE_PARAM,
+    BASS_LINE_PARAM,
   ],
   createInstance(sampleRate: number): VoiceInstance {
     return new SubMotionVoice(sampleRate);

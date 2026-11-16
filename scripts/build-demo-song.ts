@@ -3,6 +3,7 @@
  *
  *   npx vite-node scripts/build-demo-song.ts            → Projekt + WAV schreiben
  *   npx vite-node scripts/build-demo-song.ts --analyze  → nur Mix-Analyse (schnell)
+ *   … --song=stahlwerk                                  → Hardtechno-Demo „Stahlwerk“ statt „Nachtschicht“
  *
  * Ziel: BeispielSetups/Projekte/Projekte/Nachtschicht/ (gleiches Format wie die App).
  */
@@ -10,11 +11,13 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderOfflineLoop, renderSongChain } from '../src/core/engine';
 import { encodeMp3, encodeWav } from '../src/core/export';
-import { createNachtschichtProject } from '../src/core/state';
+import { createHardtechnoProject, createNachtschichtProject } from '../src/core/state';
 import { sanitizeStorageName } from '../src/storage/ProjectStorageAdapter';
 
 const analyzeOnly = process.argv.includes('--analyze');
-const project = createNachtschichtProject();
+const isStahlwerk = process.argv.some((a) => a === '--song=stahlwerk');
+const project = isStahlwerk ? createHardtechnoProject() : createNachtschichtProject();
+const analyzeSections = isStahlwerk ? [1, 2] : [2, 3];
 
 function measure(left: Float32Array, right: Float32Array, sr: number) {
   // grobe Bänder: < 150 Hz, 150 Hz – 5 kHz, > 5 kHz (One-Pole-Filter)
@@ -61,7 +64,7 @@ function measure(left: Float32Array, right: Float32Array, sr: number) {
 }
 
 // 1) Pegel pro Layer im Peak- und Break-Abschnitt (isoliert gerendert)
-for (const secIdx of [2, 3]) {
+for (const secIdx of analyzeSections) {
   const sec = project.sections[secIdx]!;
   console.log(`\n=== Layer-Pegel: ${sec.name} (8 Takte, 24 kHz) ===`);
   const sr = 24000;
@@ -112,7 +115,7 @@ if (!analyzeOnly) {
     const file = `${String(i + 1).padStart(2, '0')}_${sanitizeStorageName(s.name, s.id)}.json`;
     writeFileSync(join(root, 'sections', file), JSON.stringify(s, null, 2));
   });
-  writeFileSync(join(root, 'exports', 'Nachtschicht_song.wav'), encodeWav(song.left, song.right, sr, 24));
-  writeFileSync(join(root, 'exports', 'Nachtschicht_song.mp3'), encodeMp3(song.left, song.right, sr, 320));
+  writeFileSync(join(root, 'exports', `${project.name}_song.wav`), encodeWav(song.left, song.right, sr, 24));
+  writeFileSync(join(root, 'exports', `${project.name}_song.mp3`), encodeMp3(song.left, song.right, sr, 320));
   console.log(`\nProjekt geschrieben nach ${root}`);
 }

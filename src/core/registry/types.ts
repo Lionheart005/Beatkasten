@@ -114,6 +114,8 @@ export interface HarmonyFrame {
   readonly rootNote: number;
   /** Bass-register root of the current chord (MIDI ~30..41). */
   readonly rootMidi: number;
+  /** Bass-register root of the KEY (tonic), independent of the current chord. */
+  readonly keyRootMidi?: number;
   readonly scaleId: string;
   readonly chordPreset: string;
   /** Chord-scale for melody voices (key scale with chord tones substituted). */
@@ -134,6 +136,7 @@ export interface HarmonyFrame {
 export interface MutableHarmonyFrame {
   rootNote: number;
   rootMidi: number;
+  keyRootMidi: number;
   scaleId: string;
   chordPreset: string;
   scaleNotesMidi: readonly number[];

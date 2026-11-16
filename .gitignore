@@ -3,3 +3,6 @@ dist/
 .vite/
 coverage/
 *.local
+
+# Eigene Projekte, Exporte & Beispiel-Setups (lokal, nicht ins Repository)
+BeispielSetups/

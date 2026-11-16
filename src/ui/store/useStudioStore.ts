@@ -5,6 +5,7 @@ import { DEFAULT_CURVE_PRESETS, type DrawnCurveData } from '../../core/math/curv
 import {
   commitSnapshot,
   createBellsAndOrganPreset,
+  createHardtechnoProject,
   createNachtschichtProject,
   createHypnoticAMinorProject,
   createInitialHistory,
@@ -29,6 +30,7 @@ import type { CycleUnit } from '../../core/theory/cycles';
 import {
   BrowserFsAdapter,
   IndexedDbAdapter,
+  sanitizeStorageName,
   type FsDirectoryHandleLike,
   type ProjectSummary,
 } from '../../storage';
@@ -74,6 +76,44 @@ const SECTION_COLORS = [
 const audioBridgeSingleton = new AudioBridge();
 const idbAdapterSingleton = new IndexedDbAdapter();
 const fsAdapterSingleton = new BrowserFsAdapter();
+
+/** Alle bekannten Projekte (Ordner + Browser-Speicher), fehlertolerant. */
+async function listKnownProjects(): Promise<ProjectSummary[]> {
+  const out: ProjectSummary[] = [];
+  try {
+    if (fsAdapterSingleton.hasRootDirectory()) out.push(...(await fsAdapterSingleton.listProjects()));
+  } catch {
+    // Ordner evtl. ohne Berechtigung
+  }
+  try {
+    out.push(...(await idbAdapterSingleton.listProjects()));
+  } catch {
+    // IndexedDB nicht verfügbar
+  }
+  return out;
+}
+
+/**
+ * Liefert einen Projektnamen, den kein ANDERES Projekt (andere ID) schon belegt –
+ * sonst „Name_2“, „Name_3“ … Vergleich wie im Dateisystem (bereinigt, ohne Groß/klein).
+ */
+export async function makeUniqueProjectName(
+  desired: string,
+  ownId: string,
+  alsoTaken: ReadonlyArray<{ id: string; name: string }> = [],
+): Promise<string> {
+  const base = desired.trim() || 'Neues_Projekt';
+  const key = (n: string) => sanitizeStorageName(n).toLowerCase();
+  const taken = new Set(
+    [...(await listKnownProjects()), ...alsoTaken].filter((p) => p.id !== ownId).map((p) => key(p.name)),
+  );
+  if (!taken.has(key(base))) return base;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = `${base}_${i}`;
+    if (!taken.has(key(candidate))) return candidate;
+  }
+  return `${base}_${ownId}`;
+}
 
 const HISTORY_DEBOUNCE_MS = 450;
 
@@ -888,25 +928,38 @@ export function useStudioStore() {
         | 'triplet-riddle'
         | 'chord-offbeat-arp'
         | 'bells-organ'
-        | 'nachtschicht-song',
+        | 'nachtschicht-song'
+        | 'stahlwerk-song',
     ) => {
       flushPendingCommit();
-      if (presetKey === 'nachtschicht-song') {
+      if (presetKey === 'nachtschicht-song' || presetKey === 'stahlwerk-song') {
         // Kompletter Song als NEUES Projekt (aktuelles Projekt bleibt gespeichert).
-        const demo = createNachtschichtProject();
+        const isHard = presetKey === 'stahlwerk-song';
+        const demo = isHard ? createHardtechnoProject() : createNachtschichtProject();
+        const id = nextUiId('proj');
         const doc: ProjectDocument = {
           ...demo,
-          id: nextUiId('proj'),
-          name: 'Nachtschicht_Demo',
+          id,
+          name: isHard ? 'Stahlwerk_Demo' : 'Nachtschicht_Demo',
           updatedAt: Date.now(),
         };
-        setProject(doc);
-        setActiveSectionId(doc.sections[2]?.id ?? null);
-        setSelectedLayerId(doc.activeSnapshot.layers.find((l) => l.id === 'ns_acid')?.id ?? '');
-        setSelectedCurveId('');
-        audioBridgeSingleton.updateSnapshot(doc.activeSnapshot);
-        void persistProject(doc);
-        showNotice('Demo-Song „Nachtschicht“ geladen – 6 Abschnitte, Export „Ganzer Song“ verfügbar');
+        const activeSec = doc.sections.find((s) => s.snapshot === doc.activeSnapshot);
+        const applyDemo = (finalDoc: ProjectDocument) => {
+          setProject(finalDoc);
+          setActiveSectionId(activeSec?.id ?? null);
+          setSelectedLayerId(finalDoc.activeSnapshot.layers[0]?.id ?? '');
+          setSelectedCurveId('');
+          audioBridgeSingleton.updateSnapshot(finalDoc.activeSnapshot);
+          void persistProject(finalDoc);
+        };
+        void makeUniqueProjectName(doc.name, id, [projectRef.current]).then((n) =>
+          applyDemo({ ...doc, name: n }),
+        );
+        showNotice(
+          isHard
+            ? 'Hardtechno-Demo „Stahlwerk“ geladen – 150 BPM, Rumble-Kick, 4 Abschnitte'
+            : 'Demo-Song „Nachtschicht“ geladen – 6 Abschnitte, Export „Ganzer Song“ verfügbar',
+        );
       } else if (presetKey === 'hypnotic-aminor') {
         const doc = createHypnoticAMinorProject();
         commitSnapshotImmediate(
@@ -1332,9 +1385,17 @@ export function useStudioStore() {
   const saveCurrentProjectExplicit = useCallback(
     async (newName?: string) => {
       flushPendingCommit();
+      const wanted = newName?.trim() || projectRef.current.name;
+      const finalName =
+        wanted === projectRef.current.name
+          ? wanted
+          : await makeUniqueProjectName(wanted, projectRef.current.id);
+      if (finalName !== wanted) {
+        showNotice(`„${wanted}“ gibt es schon – umbenannt in „${finalName}“`);
+      }
       const updatedDoc: ProjectDocument = {
         ...projectRef.current,
-        name: newName?.trim() || projectRef.current.name,
+        name: finalName,
         updatedAt: Date.now(),
       };
       setProject(updatedDoc);
@@ -1353,17 +1414,23 @@ export function useStudioStore() {
   const saveProjectCopy = useCallback(
     async (copyName: string) => {
       flushPendingCommit();
-      const name = copyName.trim() || `${projectRef.current.name}_Kopie`;
+      const wanted = copyName.trim() || `${projectRef.current.name}_Kopie`;
+      const id = nextUiId('proj');
+      const name = await makeUniqueProjectName(wanted, id, [projectRef.current]);
       const copy: ProjectDocument = {
         ...projectRef.current,
-        id: nextUiId('proj'),
+        id,
         name,
         updatedAt: Date.now(),
       };
       setProject(copy);
       await persistProject(copy);
       await refreshSavedProjects();
-      showNotice(`Kopie gespeichert und geöffnet: ${name}`);
+      showNotice(
+        name !== wanted
+          ? `„${wanted}“ gibt es schon – Kopie gespeichert als „${name}“`
+          : `Kopie gespeichert und geöffnet: ${name}`,
+      );
     },
     [flushPendingCommit, persistProject, refreshSavedProjects, showNotice],
   );
@@ -1376,10 +1443,14 @@ export function useStudioStore() {
         base.activeSnapshot,
         'Neues Projekt Start',
       );
+      const wanted = name.trim() || 'Neues_Projekt';
+      const id = nextUiId('proj');
+      // Das aktuell offene Projekt zählt mit (auch wenn es noch nicht gespeichert wurde).
+      const finalName = await makeUniqueProjectName(wanted, id, [projectRef.current]);
       const doc: ProjectDocument = {
         ...base,
-        id: nextUiId('proj'),
-        name: name.trim() || 'Neues_Techno_Projekt',
+        id,
+        name: finalName,
         updatedAt: Date.now(),
         activeHistoryNodeId: initialHistory.activeNodeId,
         historyNodes: initialHistory.nodes,
@@ -1391,7 +1462,11 @@ export function useStudioStore() {
       audioBridgeSingleton.updateSnapshot(doc.activeSnapshot);
       await persistProject(doc);
       await refreshSavedProjects();
-      showNotice(`Neues Projekt angelegt: ${doc.name}`);
+      showNotice(
+        finalName !== wanted
+          ? `„${wanted}“ gibt es schon – neues Projekt heißt „${finalName}“ (nichts überschrieben)`
+          : `Neues Projekt angelegt: ${doc.name}`,
+      );
     },
     [flushPendingCommit, persistProject, refreshSavedProjects, showNotice],
   );

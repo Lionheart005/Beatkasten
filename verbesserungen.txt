@@ -1,6 +1,2 @@
-song abschnitte verschieben und klar anzeigen welcher gerade aktiv. und automatisch die veränderungen in den aktuellen abschnitt synchronisieren.
-und man soll layer aus verschiedenen abschnitten kopieren können
-und beim export auch alle abschnitte hintereinander rendern können. also nicht nur layer dublizieren sondern auch kopieren option. 
-während es rendert audio absipelen im hintergrund stoppen 
-
-bei orgel und allen die irgendwie mit melodie haben ncoh mehr einstellungen und optionen hinzufügen wie die springen (pendel und random reicht nicht, soll noch mehr deteiliertere einstellungen geben wie geschwindigkeit oder auch dort arpeggio)
+man soll die einzelnen fenster mit der maus vergrößern und verkleiner können 
+der name in den layers ist nicht zu lsesen auf normalem bildschimr

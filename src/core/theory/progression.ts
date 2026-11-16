@@ -373,6 +373,7 @@ export function buildHarmonyTimeline(
     const frame: HarmonyFrame = {
       rootNote: st.rootPc,
       rootMidi,
+      keyRootMidi: BASS_BASE_MIDI + keyPc,
       bassMidi: rootMidi,
       scaleId: harmony.scaleId,
       chordPreset: st.chordPresetId,

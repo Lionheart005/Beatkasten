@@ -69,3 +69,68 @@ export function foldScaleInto(
   }
   return count;
 }
+
+/**
+ * Schätzt die Tempo-Geschwindigkeit (Beats pro Sample) aus dem Fortschritt von
+ * `ctx.beatPosition` zwischen zwei Blöcken – Voices kennen das BPM nicht direkt.
+ */
+export class BeatTracker {
+  private lastBeat = Number.NaN;
+  private lastSamples = 0;
+  public beatsPerSample: number;
+
+  constructor(sampleRate: number) {
+    this.beatsPerSample = 128 / 60 / sampleRate;
+  }
+
+  public reset(): void {
+    this.lastBeat = Number.NaN;
+    this.lastSamples = 0;
+  }
+
+  public update(ctx: VoiceRenderContext): number {
+    const b = ctx.beatPosition;
+    if (Number.isFinite(b) && Number.isFinite(this.lastBeat) && this.lastSamples > 0) {
+      const d = (b - this.lastBeat) / this.lastSamples;
+      // nur plausible Werte (20–300 BPM) übernehmen – Sprünge (Seek/Loop) ignorieren
+      const minBps = 20 / 60 / ctx.sampleRate;
+      const maxBps = 300 / 60 / ctx.sampleRate;
+      if (d >= minBps && d <= maxBps) this.beatsPerSample += 0.5 * (d - this.beatsPerSample);
+    }
+    this.lastBeat = b;
+    this.lastSamples = Math.max(0, ctx.numSamples | 0);
+    return this.beatsPerSample;
+  }
+}
+
+/** Verzerrungs-Arten für harte Bässe & Kicks. */
+export const DIST_MODE_OPTIONS = [
+  { value: 0, label: 'Weich (Sättigung)' },
+  { value: 1, label: 'Hart (Clipping)' },
+  { value: 2, label: 'Gebrochen (Wavefold)' },
+  { value: 3, label: 'Röhre (asymmetrisch)' },
+  { value: 4, label: 'Digital (Bitcrusher)' },
+] as const;
+
+/**
+ * Formt ein Sample nach Verzerrungs-Art (Eingang schon verstärkt). Modus 4 (Bitcrusher)
+ * quantisiert nur die Amplitude; das Sample-Halten passiert in der Voice.
+ */
+export function distort(x: number, mode: number): number {
+  switch (mode) {
+    case 1:
+      return x > 1 ? 1 : x < -1 ? -1 : x;
+    case 2: {
+      // sinusförmiges Zurückfalten: lauter = mehr Obertöne statt mehr Pegel
+      return Math.sin(x * 1.5707963);
+    }
+    case 3:
+      return fastTanh(x + 0.4) - 0.3799;
+    case 4: {
+      const c = x > 1 ? 1 : x < -1 ? -1 : x;
+      return Math.round(c * 12) / 12;
+    }
+    default:
+      return fastTanh(x);
+  }
+}

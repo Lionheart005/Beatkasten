@@ -322,9 +322,33 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
     };
   }
 
+  /**
+   * Ordnername für ein Projekt: Wunschname, aber NIE ein Ordner, der einem anderen
+   * Projekt (andere ID) gehört – dann wird „_2“, „_3“ … angehängt (Schutz vor
+   * versehentlichem Überschreiben bei gleichem Namen).
+   */
+  private async resolveOwnDirName(
+    projectsDir: FsDirectoryHandle,
+    desired: string,
+    projectId: string,
+  ): Promise<string> {
+    for (let i = 1; i < 1000; i++) {
+      const candidate = i === 1 ? desired : `${desired}_${i}`;
+      const existing = await tryGetDir(projectsDir, candidate);
+      if (!existing) return candidate;
+      const manifest = await readJsonFile<ProjectManifestJson>(existing, 'project.json');
+      if (!manifest || manifest.id === projectId) return candidate;
+    }
+    return `${desired}_${projectId}`;
+  }
+
   async saveProject(project: ProjectDocument): Promise<void> {
     const projectsDir = await this.getProjectsDir();
-    const dirName = sanitizeStorageName(project.name, project.id);
+    const dirName = await this.resolveOwnDirName(
+      projectsDir,
+      sanitizeStorageName(project.name, project.id),
+      project.id,
+    );
     const previousDirName = this.dirNameById.get(project.id);
     const projectDir = await ensureDir(projectsDir, dirName);
 

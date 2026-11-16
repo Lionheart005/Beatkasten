@@ -156,9 +156,14 @@ export function ProjectModal({
             </button>
             <button
               type="button"
-              title="Leeres Starter-Projekt mit diesem Namen anlegen"
+              title={
+                isRename
+                  ? `Neues Starter-Projekt „${trimmed}“ anlegen (gibt es den Namen schon, wird „_2“ angehängt – nichts wird überschrieben)`
+                  : 'Neues Starter-Projekt anlegen (Name noch nicht geändert → „Neues_Projekt“; das aktuelle Projekt bleibt erhalten)'
+              }
               onClick={async () => {
-                await onCreateNew(nameInput);
+                // Name unverändert = Nutzer will einfach „neu“ – nicht den Namen des offenen Projekts übernehmen.
+                await onCreateNew(isRename ? trimmed : 'Neues_Projekt');
                 onClose();
               }}
             >

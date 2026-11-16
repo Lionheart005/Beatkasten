@@ -102,6 +102,7 @@ export class TechnoEngine {
     this.liveHarmony = {
       rootNote: first.rootNote,
       rootMidi: first.rootMidi,
+      keyRootMidi: first.keyRootMidi ?? first.rootMidi,
       scaleId: first.scaleId,
       chordPreset: first.chordPreset,
       scaleNotesMidi: first.scaleNotesMidi,
@@ -358,6 +359,7 @@ export class TechnoEngine {
     const lh = this.liveHarmony;
     lh.rootNote = f.rootNote;
     lh.rootMidi = f.rootMidi;
+    lh.keyRootMidi = f.keyRootMidi ?? f.rootMidi;
     lh.bassMidi = f.rootMidi;
     lh.scaleId = f.scaleId;
     lh.chordPreset = f.chordPreset;
