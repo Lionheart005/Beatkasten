@@ -8,7 +8,16 @@ import type {
 import { midiToFreq } from '../../theory';
 import { MELODY_EXTRA_PARAMS } from '../../theory/melody';
 import { BASS_RANGE_PARAM, BassNotePicker, createBassOctaveParam, createBassPatternParam } from './bassNotes';
-import { clamp01, decayCoeff, detectNewTrigger, DIST_MODE_OPTIONS, distort, readParam } from './voiceUtils';
+import {
+  clamp01,
+  decayCoeff,
+  detectNewTrigger,
+  DIST_MODE_OPTIONS,
+  distort,
+  NoteHold,
+  readParam,
+  SUSTAIN_PARAM,
+} from './voiceUtils';
 
 /**
  * Reese-Bass: drei gegeneinander verstimmte Sägezähne erzeugen das typische
@@ -179,6 +188,8 @@ const OCTAVE_PARAM = createBassOctaveParam(0);
 const WOBBLE_BEATS = [0, 4, 2, 1, 0.5, 1 / 3, 0.25, 8];
 
 export class ReeseBassVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly oscC: PolyBlepOscillator;
   private readonly oscL: PolyBlepOscillator;
@@ -216,6 +227,7 @@ export class ReeseBassVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.oscC.reset(0);
     this.oscL.reset(0.33);
     this.oscR.reset(0.71);
@@ -254,6 +266,7 @@ export class ReeseBassVoice implements VoiceInstance {
     const noteLength = readParam(LENGTH_PARAM, params);
     const glide = readParam(GLIDE_PARAM, params);
     const width = readParam(WIDTH_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     const trig = detectNewTrigger(ctx);
     if (trig > 0) {
@@ -264,10 +277,12 @@ export class ReeseBassVoice implements VoiceInstance {
         this.hasNote = true;
         const accent = Number.isFinite(ctx.timeFrame.accent) ? clamp01(ctx.timeFrame.accent) : 0.7;
         this.amp = Math.max(this.amp, 0.75 + 0.25 * accent);
+        this.holdVel = 0.75 + 0.25 * accent;
         this.filterEnv = 1;
       }
     }
 
+    const holdFloor = this.hold.floor(ctx, trig, sustain, this.holdVel);
     // Ton-Länge 1 = liegt praktisch bis zum nächsten Ton
     const ampCoeff = noteLength >= 0.995 ? 1 : decayCoeff(0.04 + noteLength * noteLength * 2.2, sr);
     const fEnvCoeff = decayCoeff(0.12, sr);
@@ -329,6 +344,7 @@ export class ReeseBassVoice implements VoiceInstance {
         outL[i] = yL * 0 === 0 ? yL : 0;
         outR[i] = yR * 0 === 0 ? yR : 0;
         amp *= ampCoeff;
+        if (amp < holdFloor) amp = holdFloor;
         filterEnv *= fEnvCoeff;
       }
     }

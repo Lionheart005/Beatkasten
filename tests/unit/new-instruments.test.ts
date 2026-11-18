@@ -83,12 +83,12 @@ describe('Swing & Melodie-Mathe', () => {
     expect(swingWarpSteps(1, 0)).toBeCloseTo(1);
   });
 
-  it('Swing-Operator landet vor der Puls-Interferenz', () => {
+  it('Swing-Operator landet vor dem Rhythmus-Raster', () => {
     const base = createDefaultLayer('S', 'metal-hat');
     const withoutSwing = base.timeOperators.filter((o) => o.moduleId !== 'time-swing');
     const ops = insertTimeOperator(withoutSwing, createSwingOperatorConfig('x'));
     const swingIdx = ops.findIndex((o) => o.moduleId === 'time-swing');
-    const pulseIdx = ops.findIndex((o) => o.moduleId === 'time-pulse-interference');
+    const pulseIdx = ops.findIndex((o) => o.moduleId === 'time-step-grid');
     expect(swingIdx).toBeGreaterThanOrEqual(0);
     expect(swingIdx).toBeLessThan(pulseIdx);
   });

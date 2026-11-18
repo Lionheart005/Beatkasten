@@ -72,6 +72,7 @@ export function SchemaControl({
   onChange,
   onOpenModTarget,
 }: SchemaControlProps) {
+  if (schema.hidden) return null;
   const safeVal = Number.isFinite(value) ? value : schema.defaultValue;
 
   const matchingRoutes = layer.modulations.filter(

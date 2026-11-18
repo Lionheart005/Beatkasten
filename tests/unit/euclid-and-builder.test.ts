@@ -19,7 +19,7 @@ const pat = (n: number, k: number, r = 0) =>
     .join('');
 
 function euclidLayer(params: Record<string, number>, interferenceOn: boolean): LayerConfig {
-  const base = createDefaultLayer('E', 'pulse-texture', 4, 'beats');
+  const base = createDefaultLayer('E', 'pulse-texture', 4, 'beats', { legacyTime: true });
   return {
     ...base,
     timeOperators: base.timeOperators.map((op) => {

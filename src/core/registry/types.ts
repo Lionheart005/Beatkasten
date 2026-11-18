@@ -2,6 +2,29 @@ export type ControlDomain = 'time' | 'timbre' | 'space' | 'harmony' | 'modulatio
 
 export type ParamCurve = 'linear' | 'exp' | 'bipolar';
 
+/** Ordnet Regler einer Funktions-Gruppe zu (einheitliche Reihenfolge im UI). */
+export type ParamGroup = 'pitch' | 'tone' | 'envelope' | 'drive' | 'motion' | 'space' | 'melody';
+
+export const PARAM_GROUP_ORDER: readonly ParamGroup[] = [
+  'pitch',
+  'tone',
+  'envelope',
+  'drive',
+  'motion',
+  'space',
+  'melody',
+];
+
+export const PARAM_GROUP_LABELS: Record<ParamGroup, string> = {
+  pitch: 'Tonhöhe',
+  tone: 'Klangfarbe',
+  envelope: 'Anschlag & Länge',
+  drive: 'Verzerrung & Biss',
+  motion: 'Bewegung',
+  space: 'Stereo',
+  melody: 'Melodie & Tonfolge',
+};
+
 export interface ParameterOption {
   readonly value: number;
   readonly label: string;
@@ -20,6 +43,10 @@ export interface ParameterSchema {
   readonly modulatable: boolean;
   readonly unitLabel?: string;
   readonly options?: readonly ParameterOption[];
+  /** Funktions-Gruppe für die geordnete Darstellung im Inspector. */
+  readonly group?: ParamGroup;
+  /** Interner Wert (z. B. Bitmuster), nicht als Regler anzeigen. */
+  readonly hidden?: boolean;
 }
 
 export interface ModuleDescriptor {
@@ -79,6 +106,8 @@ export interface TimeFrame {
   readonly accent: number;
   readonly stepIndex: number;
   readonly pulseSlope?: number;
+  /** 1 while the current note is held (key down), 0 otherwise. */
+  readonly gate?: number;
 }
 
 export interface MutableTimeFrame {
@@ -88,6 +117,7 @@ export interface MutableTimeFrame {
   accent: number;
   stepIndex: number;
   pulseSlope: number;
+  gate: number;
 }
 
 export interface TimeOperatorModule extends ModuleDescriptor {
@@ -122,7 +152,10 @@ export interface HarmonyFrame {
   readonly scaleNotesMidi: readonly number[];
   /** Voiced chord notes (ascending); voice-led when enabled. */
   readonly chordNotesMidi: readonly number[];
+  /** Actual bass note (bass register); differs from rootMidi for inversions / slash chords. */
   readonly bassMidi?: number;
+  /** True when the bass pauses for this chord (builder: "Kein Bass"). */
+  readonly bassRest?: boolean;
   /** Voicing of the following chord (for glide / crossfade transitions). */
   readonly nextChordNotesMidi?: readonly number[];
   readonly transitionType?: ChordTransitionType;
@@ -142,6 +175,7 @@ export interface MutableHarmonyFrame {
   scaleNotesMidi: readonly number[];
   chordNotesMidi: readonly number[];
   bassMidi: number;
+  bassRest: boolean;
   nextChordNotesMidi: readonly number[];
   transitionType: ChordTransitionType;
   transitionProgress: number;

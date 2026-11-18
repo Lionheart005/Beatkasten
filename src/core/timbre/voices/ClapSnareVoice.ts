@@ -5,7 +5,7 @@ import type {
   VoiceModule,
   VoiceRenderContext,
 } from '../../registry/types';
-import { clamp01, decayCoeff, detectNewTrigger, fastTanh, readParam } from './voiceUtils';
+import { clamp01, decayCoeff, detectNewTrigger, fastTanh, NoteHold, readParam, SUSTAIN_PARAM } from './voiceUtils';
 
 /**
  * Clap & Snare: ein Händeklatscher entsteht aus 3–4 sehr kurz hintereinander
@@ -103,6 +103,8 @@ const WIDTH_PARAM: ParameterSchema = {
 };
 
 export class ClapSnareVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly noiseL = new WhiteNoiseGenerator(0x6a09e667);
   private readonly noiseR = new WhiteNoiseGenerator(0xbb67ae85);
@@ -128,6 +130,7 @@ export class ClapSnareVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.sinceTrig = 1e9;
     this.vel = 0;
     this.burstEnv = 0;
@@ -161,6 +164,7 @@ export class ClapSnareVoice implements VoiceInstance {
     const bodyTune = readParam(BODY_TUNE_PARAM, params);
     const snappy = readParam(SNAPPY_PARAM, params);
     const width = readParam(WIDTH_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     const trig = detectNewTrigger(ctx);
     if (trig > 0) {
@@ -173,10 +177,12 @@ export class ClapSnareVoice implements VoiceInstance {
       this.bodyEnv = this.vel;
       this.pitchEnv = 1;
       this.rattleEnv = this.vel;
+      this.holdVel = this.vel;
       this.phase1 = 0;
       this.phase2 = 0.25;
     }
 
+    const holdFloor = this.hold.floor(ctx, trig, sustain, this.holdVel);
     const clapHz = clamp(800 + tone * 1500, 300, sr * 0.4);
     this.clapBpL.setParams(clapHz, 1.5, 1);
     this.clapBpR.setParams(clapHz * (1 + 0.05 * width), 1.5, 1);
@@ -240,6 +246,10 @@ export class ClapSnareVoice implements VoiceInstance {
       this.bodyEnv *= bodyCoeff;
       this.pitchEnv *= pitchCoeff;
       this.rattleEnv *= rattleCoeff;
+      if (holdFloor > 0) {
+        if (this.rattleEnv < holdFloor) this.rattleEnv = holdFloor;
+        if (t >= lastBurstAt && this.tailEnv < holdFloor * 0.85) this.tailEnv = holdFloor * 0.85;
+      }
       if (this.burstEnv < 1e-6) this.burstEnv = 0;
       if (this.tailEnv < 1e-6) this.tailEnv = 0;
       if (this.bodyEnv < 1e-6) this.bodyEnv = 0;

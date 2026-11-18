@@ -8,7 +8,16 @@ import type {
 import { midiToFreq } from '../../theory';
 import { MELODY_EXTRA_PARAMS } from '../../theory/melody';
 import { BASS_RANGE_PARAM, BassNotePicker, createBassOctaveParam, createBassPatternParam } from './bassNotes';
-import { clamp01, decayCoeff, detectNewTrigger, DIST_MODE_OPTIONS, distort, readParam } from './voiceUtils';
+import {
+  clamp01,
+  decayCoeff,
+  detectNewTrigger,
+  DIST_MODE_OPTIONS,
+  distort,
+  NoteHold,
+  readParam,
+  SUSTAIN_PARAM,
+} from './voiceUtils';
 
 /**
  * Industrie-Bass (FM & Verzerrung): ein Sinus wird von einem zweiten Sinus in der
@@ -173,6 +182,8 @@ const PATTERN_PARAM = createBassPatternParam(0);
 const OCTAVE_PARAM = createBassOctaveParam(0);
 
 export class FmBassVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly lp: ZdfSvfFilter;
   private readonly dc: DCBlocker;
@@ -195,6 +206,7 @@ export class FmBassVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.lp.reset();
     this.dc.reset();
     this.picker.reset();
@@ -231,6 +243,7 @@ export class FmBassVoice implements VoiceInstance {
     const sub = readParam(SUB_PARAM, params);
     const noteLength = readParam(LENGTH_PARAM, params);
     const pitchDrop = readParam(PITCH_DROP_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     const trig = detectNewTrigger(ctx);
     if (trig > 0) {
@@ -239,6 +252,7 @@ export class FmBassVoice implements VoiceInstance {
         this.hz = clamp(midiToFreq(midi), 20, sr * 0.3);
         const accent = Number.isFinite(ctx.timeFrame.accent) ? clamp01(ctx.timeFrame.accent) : 0.7;
         this.amp = 0.72 + 0.28 * accent;
+        this.holdVel = this.amp;
         this.biteEnv = 1;
         this.pitchEnv = 1;
         // gleiche Startphase → jeder Ton schlägt gleich hart an
@@ -248,6 +262,7 @@ export class FmBassVoice implements VoiceInstance {
       }
     }
 
+    const holdFloor = this.hold.floor(ctx, trig, sustain, this.holdVel);
     const ampCoeff = noteLength >= 0.995 ? 1 : decayCoeff(0.025 + noteLength * noteLength * 1.6, sr);
     const biteCoeff = decayCoeff(biteDecay * 0.5, sr);
     const pitchCoeff = decayCoeff(0.012, sr);
@@ -294,6 +309,7 @@ export class FmBassVoice implements VoiceInstance {
       outL[i] = v;
       outR[i] = v;
       this.amp *= ampCoeff;
+      if (this.amp < holdFloor) this.amp = holdFloor;
       this.biteEnv *= biteCoeff;
       this.pitchEnv *= pitchCoeff;
     }

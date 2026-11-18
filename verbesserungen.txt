@@ -1,2 +1,13 @@
-man soll die einzelnen fenster mit der maus vergrößern und verkleiner können 
-der name in den layers ist nicht zu lsesen auf normalem bildschimr
+es soll für alle instrumente möglich sein theoretisch töne auszuhalten
+
+es soll möglich sein isntrumente von den accorden abzukoppeln und ihnen einen beliebigen einzelton zu geben.
+
+ich will dass es für den bass im akkord baukasten eine ganz eigene spalte für grundtöne gibt, dass man auch umkehrungen und grundton lose akkorde spielen könnte wenn man will. 
+
+ich will, dass die "wann" spalte komplett einmal überarbeitet wird. es ist zwar ganz cool von der idee, aber sehr umständlich,
+
+ich will dass man ähnlich wie bei dem eyklidischen rhythmus auswählen kann wie viele unterteilungen es gibt, aber dann auch per hand die einzelnen beats setzten kann durch an und ausklicken der vierecke. 
+dafür soll dann das ganze gravitations ding wegfallen und alle anderen dadurch obsoltenen einstellungen. aber man soll auch noch die spitze einstellen können bzw wie kantig die kurve ist und auch wie lange sie ausklingt... und auch die zeitverzögerung kann bleiben. swing und shuffle und zufall und drift kann auch bleiben. 
+
+zum klang einstellungen: ich finde es manchmal etwas random wie die einstellungen bei einzelnen instrumenten im vergleich zu ähnlich anderen sind und würde das gerne auch etwas vereinheitlichen und etwas geordneter für den workflow welche einstellungen wozu gehören.
+

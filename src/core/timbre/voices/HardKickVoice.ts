@@ -15,6 +15,8 @@ import {
   distort,
   fastTanh,
   readParam,
+  NoteHold,
+  SUSTAIN_PARAM,
 } from './voiceUtils';
 
 /**
@@ -195,6 +197,8 @@ const RUMBLE_DARK_PARAM: ParameterSchema = {
 };
 
 export class HardKickVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly beat: BeatTracker;
   private readonly noise = new WhiteNoiseGenerator(0x1b873593);
@@ -223,6 +227,7 @@ export class HardKickVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.beat.reset();
     this.noise.reset();
     this.toneLp.reset();
@@ -263,6 +268,7 @@ export class HardKickVoice implements VoiceInstance {
     const rumbleLength = readParam(RUMBLE_LENGTH_PARAM, params);
     const grit = readParam(RUMBLE_GRIT_PARAM, params);
     const dark = readParam(RUMBLE_DARK_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     // Tonhöhe: Grundton der Tonart (fest) oder des Akkords, gefaltet in 30..41 (~46–87 Hz)
     const chordRoot = Number.isFinite(ctx.harmony.rootMidi) ? ctx.harmony.rootMidi : 36;
@@ -279,11 +285,13 @@ export class HardKickVoice implements VoiceInstance {
       this.phase = 0; // harte Kicks brauchen jedes Mal dieselbe Startphase
       this.pitchEnv = 1;
       this.ampEnv = this.vel;
+      this.holdVel = this.vel;
       this.clickEnv = this.vel;
       this.sinceTrig = 0;
       this.hasHit = true;
     }
 
+    const holdFloor = this.hold.floor(ctx, trig, sustain, this.holdVel);
     const pitchCoeff = decayCoeff(0.006 + sweep * sweep * 0.09, sr);
     const ampCoeff = decayCoeff(decay * 0.42, sr);
     const clickCoeff = decayCoeff(0.0018, sr);
@@ -349,6 +357,7 @@ export class HardKickVoice implements VoiceInstance {
 
       this.pitchEnv *= pitchCoeff;
       this.ampEnv *= ampCoeff;
+      if (this.ampEnv < holdFloor) this.ampEnv = holdFloor;
       this.clickEnv *= clickCoeff;
       this.sinceTrig++;
     }

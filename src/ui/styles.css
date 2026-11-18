@@ -1199,26 +1199,208 @@ button.btn-attention {
   font-weight: 600;
 }
 
-/* Euclidean rhythm pattern preview */
-.euclid-pattern {
+/* ---------- Rhythmus-Raster (Säule 1) ---------- */
+.step-grid-editor {
   display: flex;
-  gap: 2px;
-  padding: 2px 0;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.euclid-cell {
-  flex: 1;
-  height: 12px;
-  min-width: 4px;
-  border-radius: 2px;
+.step-grid-editor.is-disabled .step-grid {
+  opacity: 0.45;
+}
+
+.step-grid-row-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.step-grid {
+  display: grid;
+  gap: 3px 2px;
+  padding: 2px 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.step-cell {
+  height: 26px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 3px;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
+  color: #0b0d12;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.euclid-cell.is-hit {
+.step-cell.is-beat {
+  border-left: 2px solid var(--border-strong);
+}
+
+.step-cell:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.step-cell.is-hit {
+  background: var(--cell-color, var(--accent-primary));
   border-color: transparent;
+  opacity: 0.78;
 }
 
+.step-cell.is-accent {
+  background: var(--cell-color, var(--accent-primary));
+  border-color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.step-cell.is-tie {
+  background: color-mix(in srgb, var(--cell-color, var(--accent-primary)) 38%, transparent);
+  border-color: transparent;
+  color: var(--text-primary);
+  border-radius: 0 3px 3px 0;
+}
+
+.step-cell.is-tie.is-orphan {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
+}
+
+.param-group-title {
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---------- Gruppierte Klang-Regler (Säule 2) ---------- */
+.param-group {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 4px;
+}
+
+.param-group-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 2px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.param-group-head:hover {
+  color: var(--text-primary);
+}
+
+.param-group-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.param-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0 4px;
+}
+
+.pitch-source {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+}
+
+.pitch-source-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---------- Bass-Spalte im Akkord-Baukasten ---------- */
+.chord-bass-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 3px solid var(--accent-green);
+}
+
+.chord-bass-row .chord-step-fields > select {
+  min-width: 0;
+}
+
+.chord-bass-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #86efac;
+}
+
+.chord-overview-lane {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chord-overview-lane > .chord-overview {
+  flex: 1;
+  min-width: 0;
+}
+
+.chord-overview-lane-label {
+  flex: 0 0 44px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.chord-overview.is-bass .chord-overview-seg {
+  background: rgba(34, 197, 94, 0.2);
+  color: #bbf7d0;
+}
+
+.chord-overview.is-bass .chord-overview-seg:nth-child(even) {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.chord-overview.is-bass .chord-overview-seg.is-rest {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(108, 121, 147, 0.18) 0 4px,
+    transparent 4px 8px
+  );
+  color: var(--text-muted);
+}
+
+.chord-overview.is-bass .chord-overview-seg.is-playing {
+  background: var(--accent-green);
+  color: #0b0d12;
+}
 
 /* ---------- Ziehbare Fenstergrößen (Splitter) ---------- */
 .studio-workspace.is-resizable,

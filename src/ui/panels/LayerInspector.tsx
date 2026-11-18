@@ -11,13 +11,20 @@ import {
 } from 'lucide-react';
 import { defaultRegistry } from '../../core/defaultRegistry';
 import { insertTimeOperator, OPTIONAL_TIME_OPERATORS } from '../../core/state/presets';
-import { euclidPattern } from '../../core/time/operators';
+import { gridParamsFromCells } from '../../core/time/operators';
 import type { DrawnCurveData } from '../../core/math/curves';
-import { buildDefaultParams } from '../../core/registry/types';
+import {
+  buildDefaultParams,
+  PARAM_GROUP_LABELS,
+  PARAM_GROUP_ORDER,
+  type ParameterSchema,
+} from '../../core/registry/types';
+import { NOTE_NAMES } from '../../core/theory/scales';
+import { cycleToBeats } from '../../core/theory/cycles';
+import { GRID_TEMPLATES, StepGridEditor } from '../components/StepGridEditor';
 import type {
   LayerConfig,
   ModulationRouteConfig,
-  OperatorConfig,
   ProcessorCardConfig,
   SecondaryVoiceConfig,
 } from '../../core/state/types';
@@ -26,6 +33,151 @@ import { CurveDrawCanvas } from '../components/CurveDrawCanvas';
 import { ModulationDrawer } from '../components/ModulationDrawer';
 import { SchemaControl } from '../components/SchemaControl';
 import type { ActiveModTarget } from '../store/useStudioStore';
+
+interface GroupedControlsProps {
+  readonly schemas: readonly ParameterSchema[];
+  readonly values: Record<string, number>;
+  readonly layer: LayerConfig;
+  readonly targetCardId: 'voice' | 'secondary-voice';
+  readonly activeModTarget: ActiveModTarget | null;
+  readonly hoveredModSourceId: string | null;
+  readonly onChange: (paramId: string, val: number) => void;
+  readonly onOpenModTarget: (target: ActiveModTarget | null) => void;
+  /** Zusätzlicher Inhalt oben in der Gruppe „Tonhöhe“ (z. B. Ton-Quelle). */
+  readonly pitchExtra?: React.ReactNode;
+}
+
+/** Klang-Regler nach Funktions-Gruppen (einheitliche Reihenfolge, einklappbar). */
+function GroupedSchemaControls({
+  schemas,
+  values,
+  layer,
+  targetCardId,
+  activeModTarget,
+  hoveredModSourceId,
+  onChange,
+  onOpenModTarget,
+  pitchExtra,
+}: GroupedControlsProps) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const v = loadLayoutPref<Record<string, boolean>>('paramGroupsCollapsed', {});
+    return v && typeof v === 'object' ? v : {};
+  });
+  const toggle = (g: string) => {
+    const next = { ...collapsed, [g]: !collapsed[g] };
+    setCollapsed(next);
+    saveLayoutPref('paramGroupsCollapsed', next);
+  };
+  const groups = PARAM_GROUP_ORDER.map((g) => ({
+    g,
+    items: schemas.filter((p) => !p.hidden && (p.group ?? 'tone') === g),
+  })).filter((x) => x.items.length > 0 || (x.g === 'pitch' && pitchExtra));
+  return (
+    <>
+      {groups.map(({ g, items }) => (
+        <div key={g} className="param-group">
+          <button
+            type="button"
+            className="param-group-head"
+            onClick={() => toggle(g)}
+            aria-expanded={!collapsed[g]}
+            title={collapsed[g] ? 'Gruppe aufklappen' : 'Gruppe einklappen'}
+          >
+            {collapsed[g] ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+            {PARAM_GROUP_LABELS[g]}
+            <span className="param-group-count">{items.length + (g === 'pitch' && pitchExtra ? 1 : 0)}</span>
+          </button>
+          {!collapsed[g] && (
+            <div className="param-group-body">
+              {g === 'pitch' && pitchExtra}
+              {items.map((schema) => (
+                <SchemaControl
+                  key={schema.id}
+                  schema={schema}
+                  value={values[schema.id] ?? schema.defaultValue}
+                  layer={layer}
+                  targetDomain="voice"
+                  targetCardId={targetCardId}
+                  activeModTarget={activeModTarget}
+                  hoveredModSourceId={hoveredModSourceId}
+                  accentColor={layer.color}
+                  onChange={(val) => onChange(schema.id, val)}
+                  onOpenModTarget={onOpenModTarget}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Ton-Quelle des Layers: folgt den Akkorden oder spielt einen festen Einzelton. */
+function PitchSourceControl({
+  layer,
+  onCommit,
+}: {
+  readonly layer: LayerConfig;
+  readonly onCommit: (pitch: NonNullable<LayerConfig['pitch']>, label: string) => void;
+}) {
+  const pitch = layer.pitch ?? { mode: 'harmony' as const, note: 9, octave: 0 };
+  const fixed = pitch.mode === 'fixed';
+  return (
+    <div className="pitch-source">
+      <div className="pitch-source-row">
+        <span className="schema-label">Ton-Quelle</span>
+        <div className="segmented">
+          <button
+            type="button"
+            className={!fixed ? 'is-active' : undefined}
+            onClick={() => onCommit({ ...pitch, mode: 'harmony' }, 'Ton-Quelle: folgt Akkorden')}
+            title="Der Layer spielt die Töne der Akkordfolge (Standard)"
+          >
+            Folgt Akkorden
+          </button>
+          <button
+            type="button"
+            className={fixed ? 'is-active' : undefined}
+            onClick={() => onCommit({ ...pitch, mode: 'fixed' }, 'Ton-Quelle: fester Ton')}
+            title="Vom Akkord abkoppeln und immer denselben Ton spielen"
+          >
+            Fester Ton
+          </button>
+        </div>
+      </div>
+      {fixed && (
+        <div className="pitch-source-row">
+          <select
+            value={((Math.round(pitch.note) % 12) + 12) % 12}
+            onChange={(e) =>
+              onCommit({ ...pitch, note: Number(e.target.value) }, `Fester Ton: ${NOTE_NAMES[Number(e.target.value)]}`)
+            }
+            title="Welcher Ton gespielt wird"
+          >
+            {NOTE_NAMES.map((n, i) => (
+              <option key={n} value={i}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <select
+            value={Math.round(pitch.octave)}
+            onChange={(e) => onCommit({ ...pitch, octave: Number(e.target.value) }, 'Fester Ton: Oktave')}
+            title="Oktave relativ zur normalen Lage des Instruments"
+          >
+            {[-2, -1, 0, 1, 2].map((o) => (
+              <option key={o} value={o}>
+                {o === 0 ? 'Normale Oktave' : `${o > 0 ? '+' : ''}${o} Oktave${Math.abs(o) > 1 ? 'n' : ''}`}
+              </option>
+            ))}
+          </select>
+          <span className="muted-note">Akkordwechsel werden ignoriert · gilt für Stimme A & B</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface LayerInspectorProps {
   layer: LayerConfig | undefined;
@@ -87,176 +239,6 @@ const POLY_CYCLE_PRESETS: ReadonlyArray<{
   { label: '7 Beats', value: 7, unit: 'beats' },
   { label: '4 Takte', value: 4, unit: 'bars' },
   { label: '8 Takte', value: 8, unit: 'bars' },
-];
-
-type RhythmPresetId = 'four-on-floor' | 'offbeat-pump' | 'triplet-gallop' | 'riddle-3-5';
-
-const RHYTHM_PRESETS: ReadonlyArray<{
-  id: RhythmPresetId;
-  label: string;
-  description: string;
-}> = [
-  {
-    id: 'four-on-floor',
-    label: 'Four-on-the-Floor',
-    description: 'Gerader 4/4 Grundpuls auf jedem Schlag',
-  },
-  {
-    id: 'offbeat-pump',
-    label: 'Offbeat-Pump',
-    description: 'Zieht die Betonung auf die treibenden Offbeats',
-  },
-  {
-    id: 'triplet-gallop',
-    label: 'Triolen-Galopp',
-    description: 'Rollender 3er-Triolen-Rhythmus mit leichtem Swing',
-  },
-  {
-    id: 'riddle-3-5',
-    label: '3-gegen-5 Rätsel',
-    description: 'Polymetrische Überlagerung aus 5er- und 3er-Welle',
-  },
-];
-
-interface RhythmPresetValues {
-  warpAmount: number;
-  subdivisions: number;
-  phaseShift: number;
-  gravity: number;
-  resetCycles?: number;
-  freqA: number;
-  freqB: number;
-  interferenceMix: number;
-  phaseOffset: number;
-  threshold: number;
-  waveShape?: number;
-}
-
-const RHYTHM_PRESET_VALUES: Record<RhythmPresetId, RhythmPresetValues> = {
-  'four-on-floor': {
-    warpAmount: 0,
-    subdivisions: 4,
-    phaseShift: 0,
-    gravity: 0,
-    resetCycles: 8,
-    freqA: 4,
-    freqB: 4,
-    interferenceMix: 0,
-    phaseOffset: 0,
-    threshold: 0,
-  },
-  'offbeat-pump': {
-    warpAmount: 0,
-    subdivisions: 4,
-    phaseShift: 0.5,
-    gravity: 0,
-    freqA: 4,
-    freqB: 4,
-    interferenceMix: 1,
-    phaseOffset: 0.5,
-    threshold: 0.15,
-  },
-  'triplet-gallop': {
-    warpAmount: 0.12,
-    subdivisions: 6,
-    phaseShift: 0,
-    gravity: 0.25,
-    freqA: 6,
-    freqB: 3,
-    interferenceMix: 0.35,
-    phaseOffset: 0,
-    threshold: 0.2,
-  },
-  'riddle-3-5': {
-    warpAmount: 0,
-    subdivisions: 5,
-    phaseShift: 0,
-    gravity: 0.2,
-    freqA: 5,
-    freqB: 3,
-    interferenceMix: 0.45,
-    phaseOffset: 0.125,
-    threshold: 0.25,
-  },
-};
-
-function applyRhythmPreset(
-  ops: readonly OperatorConfig[],
-  presetId: RhythmPresetId,
-): OperatorConfig[] {
-  const preset = RHYTHM_PRESET_VALUES[presetId];
-  return ops.map((op) => {
-    if (op.moduleId === 'time-warp') {
-      return {
-        ...op,
-        bypassed: false,
-        params: {
-          warpAmount: preset.warpAmount,
-        },
-      };
-    }
-    if (op.moduleId === 'time-grid-gravity') {
-      return {
-        ...op,
-        bypassed: false,
-        params: {
-          subdivisions: preset.subdivisions,
-          phaseShift: preset.phaseShift,
-          gravity: preset.gravity,
-        },
-      };
-    }
-    if (op.moduleId === 'time-phase-drift') {
-      return {
-        ...op,
-        bypassed: false,
-        params: {
-          ...op.params,
-          driftSteps: 0,
-          ...(preset.resetCycles !== undefined
-            ? { resetCycles: preset.resetCycles }
-            : {}),
-        },
-      };
-    }
-    if (op.moduleId === 'time-pulse-interference') {
-      return {
-        ...op,
-        bypassed: false,
-        params: {
-          freqA: preset.freqA,
-          freqB: preset.freqB,
-          interferenceMix: preset.interferenceMix,
-          phaseOffset: preset.phaseOffset,
-          threshold: preset.threshold,
-          waveShape: preset.waveShape ?? 0,
-        },
-      };
-    }
-    if (op.moduleId === 'time-euclid') {
-      // Classic presets are built on the pulse interference.
-      return { ...op, bypassed: true };
-    }
-    return op;
-  });
-}
-
-const EUCLID_TEMPLATES: ReadonlyArray<{
-  label: string;
-  steps: number;
-  hits: number;
-  rotation?: number;
-  description: string;
-}> = [
-  { label: 'Tresillo 3/8', steps: 8, hits: 3, description: 'x..x..x. – Basis von Reggaeton, Dembow & vielen Techno-Basslines' },
-  { label: 'Cinquillo 5/8', steps: 8, hits: 5, description: 'x.xx.xx. – kubanischer Puls, treibend' },
-  { label: 'Bossa 5/16', steps: 16, hits: 5, description: 'Weit verteilte, schwebende Akzente' },
-  { label: 'Samba 7/16', steps: 16, hits: 7, description: 'Lebendige, verschachtelte Sechzehntel' },
-  { label: 'Roll 9/16', steps: 16, hits: 9, description: 'Dichter, rollender Hi-Hat-Teppich' },
-  { label: 'Dicht 13/16', steps: 16, hits: 13, description: 'Fast durchgehend mit wenigen Lücken' },
-  { label: 'Triole 4/12', steps: 12, hits: 4, description: 'Triolischer Viertelpuls' },
-  { label: 'Aksak 4/9', steps: 9, hits: 4, description: 'Hinkender 2-2-2-3-Rhythmus (Balkan)' },
-  { label: 'Rätsel 5/13', steps: 13, hits: 5, description: 'Ungerades Raster – erzeugt lange Phasenrätsel' },
 ];
 
 export function LayerInspector({
@@ -464,77 +446,41 @@ export function LayerInspector({
     );
   };
 
-  const applyEuclidTemplate = (opId: string, t: (typeof EUCLID_TEMPLATES)[number]) => {
+  const commitTimeOpParams = (opId: string, patch: Record<string, number>, label: string) => {
     onCommitLayerImmediate(
       layer.id,
       (l) => ({
         ...l,
         timeOperators: l.timeOperators.map((op) =>
-          op.id === opId
-            ? {
-                ...op,
-                bypassed: false,
-                params: {
-                  ...op.params,
-                  euclidSteps: t.steps,
-                  euclidHits: t.hits,
-                  euclidRotation: t.rotation ?? 0,
-                },
-              }
-            : op,
+          op.id === opId ? { ...op, params: { ...op.params, ...patch } } : op,
         ),
       }),
-      `Euklid-Vorlage: ${t.label}`,
+      label,
     );
   };
 
-  const renderEuclidExtras = (op: OperatorConfig) => {
-    const steps = op.params.euclidSteps ?? 16;
-    const hits = op.params.euclidHits ?? 5;
-    const rotation = op.params.euclidRotation ?? 0;
-    const pattern = euclidPattern(steps, hits, rotation);
-    const isMask = Math.round(op.params.euclidMode ?? 0) === 1;
-    const interferenceOn = layer.timeOperators.some(
-      (o) => o.moduleId === 'time-pulse-interference' && !o.bypassed,
-    );
-    return (
-      <>
-        <div className="euclid-pattern" title={`${Math.min(hits, steps)} Schläge auf ${steps} Steps`}>
-          {pattern.map((on, i) => (
-            <span
-              key={i}
-              className={`euclid-cell${on ? ' is-hit' : ''}`}
-              style={on ? { background: layer.color } : undefined}
-            />
-          ))}
-        </div>
-        <div className="preset-chips">
-          {EUCLID_TEMPLATES.map((t) => (
-            <button
-              key={t.label}
-              type="button"
-              className={`preset-chip${t.steps === steps && t.hits === hits ? ' is-active' : ''}`}
-              title={t.description}
-              onClick={() => applyEuclidTemplate(op.id, t)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        {!op.bypassed && (
-          <div className="muted-note">
-            {isMask
-              ? interferenceOn
-                ? 'Maske: nur Pulse der Puls-Interferenz, die auf einen Schlag fallen, kommen durch (am besten Puls-Welle A = Steps).'
-                : 'Maske ohne aktive Puls-Interferenz: der Operator erzeugt den Puls selbst.'
-              : interferenceOn
-                ? 'Eigener Puls: ersetzt den Rhythmus der Puls-Interferenz (Beschleunigung & Gravitation wirken weiter).'
-                : 'Eigener Puls: dieser Operator bestimmt den Rhythmus des Layers.'}
-          </div>
-        )}
-      </>
+  const removeTimeOp = (opId: string, label: string) => {
+    onCommitLayerImmediate(
+      layer.id,
+      (l) => ({
+        ...l,
+        timeOperators: l.timeOperators.filter((op) => op.id !== opId),
+        modulations: l.modulations.filter(
+          (m) => !(m.targetDomain === 'time' && m.targetCardId === opId),
+        ),
+      }),
+      `${label} entfernt`,
     );
   };
+
+  const commitPitch = (pitch: NonNullable<LayerConfig['pitch']>, label: string) => {
+    onCommitLayerImmediate(layer.id, (l) => ({ ...l, pitch }), label);
+  };
+
+  const gridOp = layer.timeOperators.find((op) => op.moduleId === 'time-step-grid');
+  const gridMod = defaultRegistry.getTimeOperator('time-step-grid');
+  const grooveOps = layer.timeOperators.filter((op) => op.moduleId !== 'time-step-grid');
+  const layerCycleBeats = cycleToBeats(layer.cycleLength.value, layer.cycleLength.unit, 4);
 
   const toggleTimeOpBypass = (opId: string) => {
     onCommitLayerImmediate(
@@ -700,33 +646,103 @@ export function LayerInspector({
             </div>
           </div>
           <div className="inspector-col-body">
-            <div className="preset-chips">
-              {RHYTHM_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className="preset-chip"
-                  title={preset.description}
-                  onClick={() =>
-                    onCommitLayerImmediate(
-                      layer.id,
-                      (l) => ({
-                        ...l,
-                        timeOperators: applyRhythmPreset(
-                          l.timeOperators,
-                          preset.id,
-                        ),
-                      }),
-                      `Rhythmus-Preset: ${preset.label}`,
-                    )
-                  }
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
+            {gridOp && gridMod ? (
+              <div className={`sub-card${gridOp.bypassed ? ' is-bypassed' : ''}`}>
+                <div className="sub-card-head">
+                  <span className="sub-card-title" title={gridMod.description}>
+                    Rhythmus-Raster
+                  </span>
+                  <button
+                    type="button"
+                    className={`btn-sm${!gridOp.bypassed ? ' is-active' : ''}`}
+                    onClick={() => toggleTimeOpBypass(gridOp.id)}
+                    title={
+                      gridOp.bypassed
+                        ? 'Raster einschalten'
+                        : 'Raster ausschalten – Flächen-Instrumente klingen dann durchgehend'
+                    }
+                  >
+                    <Power size={11} />
+                    {gridOp.bypassed ? 'Aus (Dauerton)' : 'An'}
+                  </button>
+                </div>
+                <div className="preset-chips">
+                  {GRID_TEMPLATES.map((t) => (
+                    <button
+                      key={t.label}
+                      type="button"
+                      className="preset-chip"
+                      title={t.description}
+                      onClick={() =>
+                        commitTimeOpParams(
+                          gridOp.id,
+                          { steps: t.steps, ...gridParamsFromCells(t.cells()) },
+                          `Rhythmus-Vorlage: ${t.label}`,
+                        )
+                      }
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <StepGridEditor
+                  params={gridOp.params}
+                  color={layer.color}
+                  cycleBeats={layerCycleBeats}
+                  disabled={gridOp.bypassed}
+                  onCommit={(patch, label) => commitTimeOpParams(gridOp.id, patch, label)}
+                />
+                <div className="param-group-title">Kurve jedes Schlags</div>
+                {gridMod.parameters
+                  .filter((schema) => !schema.hidden && schema.id !== 'steps')
+                  .map((schema) => (
+                    <SchemaControl
+                      key={schema.id}
+                      schema={schema}
+                      value={gridOp.params[schema.id] ?? schema.defaultValue}
+                      layer={layer}
+                      targetDomain="time"
+                      targetCardId={gridOp.id}
+                      activeModTarget={activeModTarget}
+                      hoveredModSourceId={hoveredModSourceId}
+                      accentColor={layer.color}
+                      onChange={(val) => updateTimeOpParam(gridOp.id, schema.id, val)}
+                      onOpenModTarget={onSetActiveModTarget}
+                    />
+                  ))}
+                <div className="muted-note">
+                  Ausgehaltene Töne: Haltebögen (Werkzeug „Halten“) malen und in Säule 2 „Halten (Sustain)“
+                  hochdrehen.
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={() =>
+                  onCommitLayerImmediate(
+                    layer.id,
+                    (l) => ({
+                      ...l,
+                      timeOperators: insertTimeOperator(
+                        l.timeOperators,
+                        OPTIONAL_TIME_OPERATORS.find((o) => o.moduleId === 'time-step-grid')!.create(l.id),
+                      ),
+                    }),
+                    'Rhythmus-Raster hinzugefügt',
+                  )
+                }
+              >
+                <Plus size={12} /> Rhythmus-Raster
+              </button>
+            )}
 
-            {layer.timeOperators.map((op) => {
+            {grooveOps.length > 0 && (
+              <div className="muted-note" style={{ fontWeight: 600 }}>
+                Groove (Reihenfolge wird automatisch richtig einsortiert):
+              </div>
+            )}
+            {grooveOps.map((op) => {
               const mod = defaultRegistry.getTimeOperator(op.moduleId);
               if (!mod) return null;
               return (
@@ -738,64 +754,74 @@ export function LayerInspector({
                     <span className="sub-card-title" title={mod.description}>
                       {mod.displayName}
                     </span>
-                    <button
-                      type="button"
-                      className={`btn-sm${!op.bypassed ? ' is-active' : ''}`}
-                      onClick={() => toggleTimeOpBypass(op.id)}
-                      title={
-                        op.bypassed
-                          ? 'Zeit-Operator aktivieren'
-                          : 'Zeit-Operator umgehen (Bypass)'
-                      }
-                    >
-                      <Power size={11} />
-                      {op.bypassed ? 'Aus' : 'An'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 3 }}>
+                      <button
+                        type="button"
+                        className={`btn-sm${!op.bypassed ? ' is-active' : ''}`}
+                        onClick={() => toggleTimeOpBypass(op.id)}
+                        title={op.bypassed ? 'Aktivieren' : 'Umgehen (Bypass)'}
+                      >
+                        <Power size={11} />
+                        {op.bypassed ? 'Aus' : 'An'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-danger btn-sm"
+                        onClick={() => removeTimeOp(op.id, mod.displayName)}
+                        title="Karte entfernen"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
                   </div>
-                  {mod.parameters.map((schema) => (
-                    <SchemaControl
-                      key={schema.id}
-                      schema={schema}
-                      value={op.params[schema.id] ?? schema.defaultValue}
-                      layer={layer}
-                      targetDomain="time"
-                      targetCardId={op.id}
-                      activeModTarget={activeModTarget}
-                      hoveredModSourceId={hoveredModSourceId}
-                      accentColor={layer.color}
-                      onChange={(val) =>
-                        updateTimeOpParam(op.id, schema.id, val)
-                      }
-                      onOpenModTarget={onSetActiveModTarget}
-                    />
-                  ))}
-                  {op.moduleId === 'time-euclid' && renderEuclidExtras(op)}
+                  {!op.bypassed &&
+                    mod.parameters
+                      .filter((schema) => !schema.hidden)
+                      .map((schema) => (
+                        <SchemaControl
+                          key={schema.id}
+                          schema={schema}
+                          value={op.params[schema.id] ?? schema.defaultValue}
+                          layer={layer}
+                          targetDomain="time"
+                          targetCardId={op.id}
+                          activeModTarget={activeModTarget}
+                          hoveredModSourceId={hoveredModSourceId}
+                          accentColor={layer.color}
+                          onChange={(val) => updateTimeOpParam(op.id, schema.id, val)}
+                          onOpenModTarget={onSetActiveModTarget}
+                        />
+                      ))}
                 </div>
               );
             })}
 
-            {OPTIONAL_TIME_OPERATORS.filter(
-              (opt) => !layer.timeOperators.some((op) => op.moduleId === opt.moduleId),
-            ).map((opt) => (
-              <button
-                key={opt.moduleId}
-                type="button"
-                className="btn-sm"
-                onClick={() =>
-                  onCommitLayerImmediate(
-                    layer.id,
-                    (l) => ({
-                      ...l,
-                      timeOperators: insertTimeOperator(l.timeOperators, opt.create(l.id)),
-                    }),
-                    `${opt.label} hinzugefügt`,
-                  )
-                }
-                title={opt.hint}
-              >
-                <Plus size={12} /> {opt.label}
-              </button>
-            ))}
+            <div className="preset-chips">
+              {OPTIONAL_TIME_OPERATORS.filter(
+                (opt) =>
+                  opt.moduleId !== 'time-step-grid' &&
+                  !layer.timeOperators.some((op) => op.moduleId === opt.moduleId),
+              ).map((opt) => (
+                <button
+                  key={opt.moduleId}
+                  type="button"
+                  className="btn-sm"
+                  onClick={() =>
+                    onCommitLayerImmediate(
+                      layer.id,
+                      (l) => ({
+                        ...l,
+                        timeOperators: insertTimeOperator(l.timeOperators, opt.create(l.id)),
+                      }),
+                      `${opt.label} hinzugefügt`,
+                    )
+                  }
+                  title={opt.hint}
+                >
+                  <Plus size={12} /> {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -824,21 +850,17 @@ export function LayerInspector({
                     Voice: {voiceModule.displayName}
                   </span>
                 </div>
-                {voiceModule.parameters.map((schema) => (
-                  <SchemaControl
-                    key={schema.id}
-                    schema={schema}
-                    value={layer.voice.params[schema.id] ?? schema.defaultValue}
-                    layer={layer}
-                    targetDomain="voice"
-                    targetCardId="voice"
-                    activeModTarget={activeModTarget}
-                    hoveredModSourceId={hoveredModSourceId}
-                    accentColor={layer.color}
-                    onChange={(val) => updateVoiceParam(schema.id, val)}
-                    onOpenModTarget={onSetActiveModTarget}
-                  />
-                ))}
+                <GroupedSchemaControls
+                  schemas={voiceModule.parameters}
+                  values={layer.voice.params}
+                  layer={layer}
+                  targetCardId="voice"
+                  activeModTarget={activeModTarget}
+                  hoveredModSourceId={hoveredModSourceId}
+                  onChange={updateVoiceParam}
+                  onOpenModTarget={onSetActiveModTarget}
+                  pitchExtra={<PitchSourceControl layer={layer} onCommit={commitPitch} />}
+                />
               </div>
             )}
 
@@ -942,26 +964,18 @@ export function LayerInspector({
                     />
                   </div>
 
-                  {secondaryVoiceMod &&
-                    secondaryVoiceMod.parameters.map((schema) => (
-                      <SchemaControl
-                        key={schema.id}
-                        schema={schema}
-                        value={
-                          secondaryParams[schema.id] ?? schema.defaultValue
-                        }
-                        layer={layer}
-                        targetDomain="voice"
-                        targetCardId="secondary-voice"
-                        activeModTarget={activeModTarget}
-                        hoveredModSourceId={hoveredModSourceId}
-                        accentColor={layer.color}
-                        onChange={(val) =>
-                          updateSecondaryVoiceParam(schema.id, val)
-                        }
-                        onOpenModTarget={onSetActiveModTarget}
-                      />
-                    ))}
+                  {secondaryVoiceMod && (
+                    <GroupedSchemaControls
+                      schemas={secondaryVoiceMod.parameters}
+                      values={secondaryParams}
+                      layer={layer}
+                      targetCardId="secondary-voice"
+                      activeModTarget={activeModTarget}
+                      hoveredModSourceId={hoveredModSourceId}
+                      onChange={updateSecondaryVoiceParam}
+                      onOpenModTarget={onSetActiveModTarget}
+                    />
+                  )}
                 </>
               )}
             </div>

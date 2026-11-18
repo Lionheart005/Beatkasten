@@ -18,6 +18,21 @@ import { DEFAULT_VOICING_RANGE, solveVoiceLeading } from './voiceLeading';
 export type { ChordTransitionType };
 export type ProgressionMode = 'preset' | 'custom';
 
+/**
+ * Bass note of a builder chord ("Bass-Spalte"): the chord root (default), a
+ * chord tone (inversions), any scale degree (slash chord) or no bass at all.
+ */
+export type BassMode = 'root' | 'third' | 'fifth' | 'seventh' | 'degree' | 'none';
+
+export const BASS_MODE_LABELS: Record<BassMode, string> = {
+  root: 'Grundton',
+  third: 'Terz (1. Umkehrung)',
+  fifth: 'Quinte (2. Umkehrung)',
+  seventh: 'Septime (3. Umkehrung)',
+  degree: 'Freier Basston',
+  none: 'Kein Bass (Pause)',
+};
+
 /** One user-defined chord of the cadence builder ("Akkord-Baukasten"). */
 export interface ChordStepConfig {
   readonly id: string;
@@ -31,6 +46,13 @@ export interface ChordStepConfig {
   readonly transitionType: ChordTransitionType;
   /** Length of the transition window at the end of this chord (beats). */
   readonly transitionBeats: number;
+  /** Bass note of this chord (default 'root'). */
+  readonly bass?: BassMode;
+  /** Scale degree 0..6 of a free bass note (bass = 'degree'). */
+  readonly bassDegree?: number;
+  readonly bassAccidental?: -1 | 0 | 1;
+  /** Rootless voicing: chord instruments leave out the chord root. */
+  readonly omitRoot?: boolean;
 }
 
 export interface HarmonySettings {
@@ -60,6 +82,12 @@ export interface ResolvedChordStep {
   readonly transitionBeats: number;
   /** Legacy parallel steps transpose the whole scale with the chord root. */
   readonly parallelScale: boolean;
+  /** Bass note in semitones from the key root (null = no bass for this chord). */
+  readonly bassOffset: number | null;
+  /** Pitch class of the bass note (-1 = no bass). */
+  readonly bassPc: number;
+  /** Chord without its root in the upper voicing. */
+  readonly omitRoot: boolean;
 }
 
 export interface SolvedHarmonyStep extends ResolvedChordStep {
@@ -174,6 +202,44 @@ export function chordNameFor(rootPc: number, intervals: readonly number[]): stri
   return `${NOTE_NAMES[pcOf(rootPc)] ?? 'C'}${chordSymbolFor(intervals).symbol}`;
 }
 
+/** Picks the chord tone for an inversion (falls back to neighbouring tones). */
+function chordToneInterval(intervals: readonly number[], kind: 'third' | 'fifth' | 'seventh'): number {
+  const want =
+    kind === 'third' ? [3, 4, 2, 5] : kind === 'fifth' ? [7, 6, 8] : [10, 11, 9];
+  for (const w of want) {
+    const hit = intervals.find((i) => pcOf(i) === w);
+    if (hit !== undefined) return hit;
+  }
+  const pos = kind === 'third' ? 1 : kind === 'fifth' ? 2 : 3;
+  return intervals[Math.min(pos, intervals.length - 1)] ?? 0;
+}
+
+/** Bass offset (semitones from the key root) of a builder step, null = no bass. */
+export function resolveStepBassOffset(
+  step: Pick<ChordStepConfig, 'bass' | 'bassDegree' | 'bassAccidental'>,
+  scaleId: string,
+  rootOffset: number,
+  intervals: readonly number[],
+): number | null {
+  const mode = step.bass ?? 'root';
+  switch (mode) {
+    case 'none':
+      return null;
+    case 'third':
+    case 'fifth':
+    case 'seventh':
+      return rootOffset + chordToneInterval(intervals, mode);
+    case 'degree': {
+      const scale = getHeptatonicIntervals(scaleId);
+      const d = ((Math.round(step.bassDegree ?? 0) % 7) + 7) % 7;
+      const acc = step.bassAccidental === -1 || step.bassAccidental === 1 ? step.bassAccidental : 0;
+      return scale[d]! + acc;
+    }
+    default:
+      return rootOffset;
+  }
+}
+
 function clampDuration(beats: number): number {
   if (!Number.isFinite(beats)) return 4;
   return Math.min(MAX_STEP_BEATS, Math.max(MIN_STEP_BEATS, beats));
@@ -200,11 +266,16 @@ export function resolveHarmonySteps(
     transitionType: ChordTransitionType,
     transitionBeats: number,
     parallelScale: boolean,
+    bassOffsetRaw: number | null = rootOffsetRaw,
+    omitRoot = false,
   ) => {
     const rootOffset = wrapOffset(rootOffsetRaw);
     const rootPc = pcOf(keyPc + rootOffset);
     const sym = chordSymbolFor(intervals);
     const dur = clampDuration(durationBeats);
+    const bassOffset = bassOffsetRaw === null ? null : wrapOffset(bassOffsetRaw);
+    const bassPc = bassOffset === null ? -1 : pcOf(keyPc + bassOffset);
+    const slash = bassPc >= 0 && bassPc !== rootPc ? `/${NOTE_NAMES[bassPc] ?? ''}` : '';
     out.push({
       startBeat: cursor,
       durationBeats: dur,
@@ -213,10 +284,13 @@ export function resolveHarmonySteps(
       intervals,
       chordPresetId: sym.id,
       degreeLabel,
-      chordName: `${NOTE_NAMES[rootPc] ?? 'C'}${sym.symbol}`,
+      chordName: `${NOTE_NAMES[rootPc] ?? 'C'}${sym.symbol}${slash}`,
       transitionType,
       transitionBeats: Math.max(0, Math.min(dur * 0.5, transitionBeats)),
       parallelScale,
+      bassOffset,
+      bassPc,
+      omitRoot: omitRoot && intervals.filter((i) => pcOf(i) !== 0).length >= 2,
     });
     cursor += dur;
   };
@@ -234,14 +308,17 @@ export function resolveHarmonySteps(
         acc,
         step.chordType,
       );
+      const rootOffsetRaw = scale[degree]! + acc;
       pushStep(
-        scale[degree]! + acc,
+        rootOffsetRaw,
         intervals,
         step.durationBeats,
         romanNumeral(degree, acc, intervals),
         step.transitionType ?? 'cut',
         step.transitionBeats ?? 0,
         false,
+        resolveStepBassOffset(step, harmony.scaleId, rootOffsetRaw, intervals),
+        step.omitRoot === true,
       );
     }
     return out;
@@ -347,14 +424,18 @@ export function buildHarmonyTimeline(
   // A single chord has nothing to lead to: keep the classic root-position voicing.
   const voiceLeading = harmony.voiceLeadingEnabled !== false && steps.length > 1;
 
+  // Rootless voicings leave the chord root out of the upper voices.
+  const voicingIntervals = (st: ResolvedChordStep): readonly number[] =>
+    st.omitRoot ? st.intervals.filter((i) => pcOf(i) !== 0) : st.intervals;
+
   const voicings = voiceLeading
     ? solveVoiceLeading(
-        steps.map((st) => ({ rootPc: st.rootPc, intervals: st.intervals })),
+        steps.map((st) => ({ rootPc: st.rootPc, intervals: voicingIntervals(st) })),
         DEFAULT_VOICING_RANGE,
       )
     : steps.map((st) => {
         const rootMidi = BASS_BASE_MIDI + keyPc + st.rootOffset;
-        return st.intervals.slice(0, 6).map((i) => rootMidi + 12 + i);
+        return voicingIntervals(st).slice(0, 6).map((i) => rootMidi + 12 + i);
       });
 
   const solved: SolvedHarmonyStep[] = steps.map((st, idx) => {
@@ -374,7 +455,8 @@ export function buildHarmonyTimeline(
       rootNote: st.rootPc,
       rootMidi,
       keyRootMidi: BASS_BASE_MIDI + keyPc,
-      bassMidi: rootMidi,
+      bassMidi: st.bassOffset === null ? rootMidi : BASS_BASE_MIDI + keyPc + st.bassOffset,
+      bassRest: st.bassOffset === null,
       scaleId: harmony.scaleId,
       chordPreset: st.chordPresetId,
       scaleNotesMidi,

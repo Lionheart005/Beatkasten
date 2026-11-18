@@ -23,7 +23,16 @@ import {
   shapeMelodyNote,
   type MelodyStepInfo,
 } from '../../theory/melody';
-import { clamp01, decayCoeff, detectNewTrigger, fastTanh, foldScaleInto, readParam } from './voiceUtils';
+import {
+  clamp01,
+  decayCoeff,
+  detectNewTrigger,
+  fastTanh,
+  foldScaleInto,
+  NoteHold,
+  readParam,
+  SUSTAIN_PARAM,
+} from './voiceUtils';
 
 /**
  * Acid-Linie im Stil der legendären Bass-Maschine: Säge/Rechteck durch ein
@@ -192,6 +201,8 @@ const RANGE_PARAM: ParameterSchema = {
 const LEGACY_DEGREES_4 = new Int32Array([0, 2, 4, 7]);
 
 export class AcidLineVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly saw: PolyBlepOscillator;
   private readonly sq: PolyBlepOscillator;
@@ -227,6 +238,7 @@ export class AcidLineVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.saw.reset(0);
     this.sq.reset(0);
     this.lp1.reset();
@@ -321,6 +333,7 @@ export class AcidLineVoice implements VoiceInstance {
     const accentProb = readParam(ACCENT_PARAM, params);
     const slideProb = readParam(SLIDE_PARAM, params);
     const drive = readParam(DRIVE_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     const trig = detectNewTrigger(ctx);
     if (trig > 0) {
@@ -339,6 +352,7 @@ export class AcidLineVoice implements VoiceInstance {
         if (!isSlide) {
           this.curMidi = midi;
           this.ampEnv = Math.max(this.ampEnv * 0.3, 0.72 + 0.28 * trig);
+          this.holdVel = 0.72 + 0.28 * trig;
         }
         this.accentAmt = isAccent ? 1 : 0;
         this.filterEnv = isSlide ? Math.max(this.filterEnv, 0.55) : 1;
@@ -346,6 +360,7 @@ export class AcidLineVoice implements VoiceInstance {
       }
     }
 
+    const holdFloor = this.hold.floor(ctx, trig, sustain, this.holdVel);
     // Ton-Länge: Gate-Zeit in Sekunden (wie lange der Ton nach dem Anschlag steht)
     const gateTime = 0.03 + noteLength * noteLength * 0.9;
     this.ampCoeff = decayCoeff(gateTime, sr);
@@ -389,6 +404,7 @@ export class AcidLineVoice implements VoiceInstance {
         outL[i] = v;
         outR[i] = v;
         ampEnv *= ampCoeff;
+        if (ampEnv < holdFloor) ampEnv = holdFloor;
         filterEnv *= filterCoeff;
       }
     }

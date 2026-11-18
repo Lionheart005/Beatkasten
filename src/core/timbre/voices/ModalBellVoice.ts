@@ -13,6 +13,7 @@ import {
   type VoiceRenderContext,
 } from '../../registry/types';
 import { midiToFreq } from '../../theory';
+import { NoteHold, SUSTAIN_PARAM } from './voiceUtils';
 import {
   computeMelodyStep,
   EXTENDED_MELODY_OPTIONS,
@@ -171,6 +172,10 @@ function readParam(schema: ParameterSchema, params: Record<string, number>): num
 }
 
 export class ModalBellVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
+  private holdSlotA = -1;
+  private holdSlotB = -1;
   private readonly sampleRate: number;
   private readonly dcBlocker: StereoDCBlocker;
   private readonly noiseL: WhiteNoiseGenerator;
@@ -259,6 +264,7 @@ export class ModalBellVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.dcBlocker.reset();
     this.noiseL.reset();
     this.noiseR.reset();
@@ -419,6 +425,8 @@ export class ModalBellVoice implements VoiceInstance {
     const octaveShift = Math.round(readParam(OCTAVE_SHIFT_PARAM, params));
     const melodyPattern = Math.round(readParam(MELODY_PATTERN_PARAM, params));
     const melodyRange = readParam(MELODY_RANGE_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
+    let struck = 0;
 
     const trig = Number.isFinite(ctx.timeFrame.triggerIntensity)
       ? clamp(ctx.timeFrame.triggerIntensity, 0, 1)
@@ -524,10 +532,15 @@ export class ModalBellVoice implements VoiceInstance {
         const repVel = mel.isNewNote ? vel : vel * 0.78;
         const slotA = this.allocateSlot();
         this.triggerSlot(slotA, primaryMidi, repVel, targetHardness);
+        this.holdSlotA = slotA;
+        this.holdSlotB = -1;
+        this.holdVel = repVel * 0.85;
+        struck = 1;
 
         if (upperDeg >= 0 && upperDeg !== primaryDeg) {
           const upperMidi = (this.scaleBuf[upperDeg] ?? primaryMidi + 7) + octaveJump;
           const slotB = this.allocateSlot();
+          this.holdSlotB = slotB;
           this.triggerSlot(
             slotB,
             upperMidi > MAX_BELL_MIDI ? upperMidi - 12 : upperMidi,
@@ -543,6 +556,7 @@ export class ModalBellVoice implements VoiceInstance {
       }
     }
 
+    const holdFloor = this.hold.floor(ctx, struck, sustain, this.holdVel);
     const sr = this.sampleRate;
     const nyquistLimit = sr * 0.44;
     const invSr = 1 / sr;
@@ -733,6 +747,11 @@ export class ModalBellVoice implements VoiceInstance {
           e1 *= d1;
           e2 *= d2;
           e3 *= d3;
+          if (holdFloor > 0 && (s === this.holdSlotA || s === this.holdSlotB)) {
+            const fl = s === this.holdSlotA ? holdFloor : holdFloor * 0.72;
+            if (e0 < fl) e0 = fl;
+            if (e1 < fl * 0.35) e1 = fl * 0.35;
+          }
           if (e0 < SLOT_RELEASE_LEVEL) e0 = 0;
           if (e1 < SLOT_RELEASE_LEVEL) e1 = 0;
           if (e2 < SLOT_RELEASE_LEVEL) e2 = 0;

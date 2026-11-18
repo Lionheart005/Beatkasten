@@ -5,6 +5,7 @@ import {
   buildDefaultParams,
   LAYER_MIX_PARAMETERS,
   type HarmonyFrame,
+  type MutableHarmonyFrame,
   type MutableTimeFrame,
   type ParameterSchema,
   type ProcessorContext,
@@ -18,8 +19,9 @@ import {
   type VoiceRenderContext,
 } from '../registry/types';
 import { ModulationRouter } from '../modulation/ModulationRouter';
-import { type LayerConfig } from '../state/types';
+import { type LayerConfig, type LayerPitchConfig } from '../state/types';
 import { cycleToBeats } from '../theory/cycles';
+import { isPulseGeneratorModule } from '../time/operators';
 
 export const CONTROL_SUBBLOCK_SIZE = 32;
 const HALF_PI = Math.PI * 0.5;
@@ -56,8 +58,47 @@ interface TimeOpSlot {
 }
 
 /** Time operators that generate rhythmic pulses (otherwise energy is flat 1). */
-function isPulseGenerator(moduleId: string): boolean {
-  return moduleId === 'time-pulse-interference' || moduleId === 'time-euclid';
+const isPulseGenerator = isPulseGeneratorModule;
+
+function makeHarmonyFrame(): MutableHarmonyFrame {
+  return {
+    rootNote: 9,
+    rootMidi: 45,
+    keyRootMidi: 45,
+    scaleId: 'natural_minor',
+    chordPreset: 'minor7',
+    scaleNotesMidi: [],
+    chordNotesMidi: [],
+    bassMidi: 45,
+    bassRest: false,
+    nextChordNotesMidi: [],
+    transitionType: 'cut',
+    transitionProgress: 0,
+    stepIndex: 0,
+  };
+}
+
+/**
+ * Harmony frame for a layer that is decoupled from the chords and plays one
+ * fixed note (computed once per config change, never in the audio hot path).
+ */
+export function buildFixedPitchFrame(pitch: LayerPitchConfig): MutableHarmonyFrame {
+  const pc = ((Math.round(pitch.note) % 12) + 12) % 12;
+  const oct = Math.max(-2, Math.min(2, Math.round(pitch.octave) || 0));
+  const root = 36 + pc + 12 * oct;
+  const scale: number[] = [];
+  for (let m = 12; m <= 108; m++) if (((m % 12) + 12) % 12 === pc) scale.push(m);
+  const chord = [root + 12, root + 12, root + 12, root + 24, root + 24, root + 24];
+  const f = makeHarmonyFrame();
+  f.rootNote = pc;
+  f.rootMidi = root;
+  f.keyRootMidi = root;
+  f.bassMidi = root;
+  f.chordPreset = 'unison';
+  f.scaleNotesMidi = scale;
+  f.chordNotesMidi = chord;
+  f.nextChordNotesMidi = chord;
+  return f;
 }
 
 interface ProcessorSlot {
@@ -150,6 +191,7 @@ export class LayerEngine {
     accent: 0,
     stepIndex: -1,
     pulseSlope: 0,
+    gate: 0,
   };
   private readonly frameB: MutableTimeFrame = {
     warpedPhase: 0,
@@ -158,8 +200,29 @@ export class LayerEngine {
     accent: 0,
     stepIndex: -1,
     pulseSlope: 0,
+    gate: 0,
   };
   private prevFrame: MutableTimeFrame = this.frameA;
+  /** Copy of the time frame with silenced notes (bass pauses for a chord). */
+  private readonly restFrame: MutableTimeFrame = {
+    warpedPhase: 0,
+    pulseEnergy: 0,
+    triggerIntensity: 0,
+    accent: 0,
+    stepIndex: -1,
+    pulseSlope: 0,
+    gate: 0,
+  };
+
+  /** Fixed single note (layer decoupled from the chords), or null = follows harmony. */
+  private fixedHarmony: MutableHarmonyFrame | null = null;
+  private fixedPitchKey = '';
+  /** Harmony as seen by bass voices: rootMidi = actual bass note of the chord. */
+  private readonly bassView: MutableHarmonyFrame = makeHarmonyFrame();
+  private primaryIsBass = false;
+  private secondaryIsBass = false;
+  private readonly primaryRestGain: OnePoleSmoother;
+  private readonly secondaryRestGain: OnePoleSmoother;
   private prevPulseTrigger = 0;
 
   private readonly timeCtx: MutableTimeEvalContext;
@@ -194,6 +257,8 @@ export class LayerEngine {
     this.gainLSmoother = new OnePoleSmoother(this.sampleRate, 12, 0);
     this.gainRSmoother = new OnePoleSmoother(this.sampleRate, 12, 0);
     this.secondaryMixSmoother = new OnePoleSmoother(this.sampleRate, 12, 0);
+    this.primaryRestGain = new OnePoleSmoother(this.sampleRate, 18, 1);
+    this.secondaryRestGain = new OnePoleSmoother(this.sampleRate, 18, 1);
 
     const dummyHarmony: HarmonyFrame = {
       rootNote: 9,
@@ -243,6 +308,8 @@ export class LayerEngine {
     this.gainLSmoother.setSampleRate(this.sampleRate);
     this.gainRSmoother.setSampleRate(this.sampleRate);
     this.secondaryMixSmoother.setSampleRate(this.sampleRate);
+    this.primaryRestGain.setSampleRate(this.sampleRate);
+    this.secondaryRestGain.setSampleRate(this.sampleRate);
 
     if (this.voiceModule) {
       this.voiceInstance = this.voiceModule.createInstance(this.sampleRate);
@@ -282,18 +349,22 @@ export class LayerEngine {
     this.gainLSmoother.reset(0);
     this.gainRSmoother.reset(0);
     this.secondaryMixSmoother.reset(0);
+    this.primaryRestGain.reset(1);
+    this.secondaryRestGain.reset(1);
     this.frameA.warpedPhase = 0;
     this.frameA.pulseEnergy = 0;
     this.frameA.triggerIntensity = 0;
     this.frameA.accent = 0;
     this.frameA.stepIndex = -1;
     this.frameA.pulseSlope = 0;
+    this.frameA.gate = 0;
     this.frameB.warpedPhase = 0;
     this.frameB.pulseEnergy = 0;
     this.frameB.triggerIntensity = 0;
     this.frameB.accent = 0;
     this.frameB.stepIndex = -1;
     this.frameB.pulseSlope = 0;
+    this.frameB.gate = 0;
     this.prevFrame = this.frameA;
     for (const slot of this.timeOpCache.values()) slot.state.fill(Number.NaN);
     this.voiceWasModulated = false;
@@ -360,6 +431,22 @@ export class LayerEngine {
         this.secondaryVoiceEffectiveParams,
       );
       this.secondaryVoiceWasModulated = false;
+    }
+
+    this.primaryIsBass = this.voiceModule?.category === 'bass';
+    this.secondaryIsBass = this.secondaryVoiceModule?.category === 'bass';
+
+    // 1c. Pitch source (fixed single note vs. harmony)
+    const pitch = config.pitch;
+    if (pitch && pitch.mode === 'fixed') {
+      const key = `${pitch.note}|${pitch.octave}`;
+      if (!this.fixedHarmony || key !== this.fixedPitchKey) {
+        this.fixedHarmony = buildFixedPitchFrame(pitch);
+        this.fixedPitchKey = key;
+      }
+    } else {
+      this.fixedHarmony = null;
+      this.fixedPitchKey = '';
     }
 
     // 2. Time operators
@@ -530,6 +617,40 @@ export class LayerEngine {
 
     const voiceInst = this.voiceInstance!;
     const voiceMod = this.voiceModule!;
+
+    // Harmony per voice: fixed note, bass view (actual bass note) or chord harmony.
+    let primaryHarmony: HarmonyFrame = harmony;
+    let secondaryHarmony: HarmonyFrame = harmony;
+    let bassResting = false;
+    if (this.fixedHarmony) {
+      primaryHarmony = this.fixedHarmony;
+      secondaryHarmony = this.fixedHarmony;
+    } else if (this.primaryIsBass || this.secondaryIsBass) {
+      const bv = this.bassView;
+      bv.rootNote = harmony.rootNote;
+      bv.rootMidi =
+        harmony.bassMidi !== undefined && Number.isFinite(harmony.bassMidi)
+          ? harmony.bassMidi
+          : harmony.rootMidi;
+      bv.keyRootMidi = harmony.keyRootMidi ?? harmony.rootMidi;
+      bv.bassMidi = bv.rootMidi;
+      bv.bassRest = harmony.bassRest === true;
+      bv.scaleId = harmony.scaleId;
+      bv.chordPreset = harmony.chordPreset;
+      bv.scaleNotesMidi = harmony.scaleNotesMidi;
+      bv.chordNotesMidi = harmony.chordNotesMidi;
+      bv.nextChordNotesMidi = harmony.nextChordNotesMidi ?? harmony.chordNotesMidi;
+      bv.transitionType = harmony.transitionType ?? 'cut';
+      bv.transitionProgress = harmony.transitionProgress ?? 0;
+      bv.stepIndex = harmony.stepIndex ?? 0;
+      if (this.primaryIsBass) primaryHarmony = bv;
+      if (this.secondaryIsBass) secondaryHarmony = bv;
+      bassResting = bv.bassRest;
+    }
+    const primaryRests = bassResting && this.primaryIsBass;
+    const secondaryRests = bassResting && this.secondaryIsBass;
+    const primaryRestTarget = primaryRests ? 0 : 1;
+    const secondaryRestTarget = secondaryRests ? 0 : 1;
     const gainLSmoother = this.gainLSmoother;
     const gainRSmoother = this.gainRSmoother;
     const outL = this.bufL;
@@ -578,8 +699,18 @@ export class LayerEngine {
       this.voiceCtx.numSamples = subLen;
       this.voiceCtx.beatPosition = subBeat;
       this.voiceCtx.beatsPerBar = beatsPerBar;
-      this.voiceCtx.timeFrame = timeFrame;
-      this.voiceCtx.harmony = harmony;
+      const restFrame = this.restFrame;
+      if (primaryRests || secondaryRests) {
+        restFrame.warpedPhase = timeFrame.warpedPhase;
+        restFrame.pulseEnergy = 0;
+        restFrame.triggerIntensity = 0;
+        restFrame.accent = 0;
+        restFrame.stepIndex = timeFrame.stepIndex;
+        restFrame.pulseSlope = 0;
+        restFrame.gate = 0;
+      }
+      this.voiceCtx.timeFrame = primaryRests ? restFrame : timeFrame;
+      this.voiceCtx.harmony = primaryHarmony;
       this.voiceCtx.prevPulseTrigger = this.prevPulseTrigger;
 
       voiceInst.process(
@@ -588,6 +719,7 @@ export class LayerEngine {
         this.voiceEffectiveParams,
         this.voiceCtx as VoiceRenderContext,
       );
+      LayerEngine.applyRestGain(this.primaryRestGain, primaryRestTarget, subL, subR, subLen);
 
       // 3b. Render optional secondary voice and equal-power blend before updating prevPulseTrigger
       const secCfg = cfg.secondaryVoice;
@@ -624,12 +756,15 @@ export class LayerEngine {
         secSubL.fill(0);
         secSubR.fill(0);
 
+        this.voiceCtx.timeFrame = secondaryRests ? restFrame : timeFrame;
+        this.voiceCtx.harmony = secondaryHarmony;
         secInst.process(
           secSubL,
           secSubR,
           this.secondaryVoiceEffectiveParams,
           this.voiceCtx as VoiceRenderContext,
         );
+        LayerEngine.applyRestGain(this.secondaryRestGain, secondaryRestTarget, secSubL, secSubR, subLen);
 
         const targetMix = clamp(secCfg.mix, 0, 1);
         for (let i = 0; i < subLen; i++) {
@@ -735,6 +870,23 @@ export class LayerEngine {
     }
   }
 
+  /** Fades a voice out while the bass pauses (click-free, zero alloc). */
+  private static applyRestGain(
+    smoother: OnePoleSmoother,
+    target: number,
+    bufL: Float32Array,
+    bufR: Float32Array,
+    len: number,
+  ): void {
+    if (target === 1 && smoother.current === 1) return;
+    for (let i = 0; i < len; i++) {
+      const g = smoother.process(target);
+      bufL[i] = bufL[i]! * g;
+      bufR[i] = bufR[i]! * g;
+    }
+    if (Math.abs(smoother.current - target) < 1e-5) smoother.reset(target);
+  }
+
   private evaluateTimeChain(
     cfg: LayerConfig,
     beatPosition: number,
@@ -765,6 +917,7 @@ export class LayerEngine {
     cur.accent = this.prevFrame.accent;
     cur.stepIndex = prevStepIndex;
     cur.pulseSlope = this.prevFrame.pulseSlope ?? 0;
+    cur.gate = this.prevFrame.gate;
 
     let hasPulseGenerator = false;
 
@@ -810,6 +963,7 @@ export class LayerEngine {
         next.accent = res.accent;
         next.stepIndex = res.stepIndex;
         next.pulseSlope = res.pulseSlope ?? 0;
+        next.gate = res.gate ?? 0;
       }
       if (isPulseGenerator(slot.moduleId)) hasPulseGenerator = true;
       const tmp = cur;
@@ -823,6 +977,7 @@ export class LayerEngine {
       cur.accent = 1;
       cur.stepIndex = 0;
       cur.pulseSlope = 0;
+      cur.gate = 1;
     }
 
     this.prevFrame = cur;

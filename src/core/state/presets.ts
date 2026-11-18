@@ -3,6 +3,11 @@ import type { CycleUnit } from '../theory/cycles';
 import { buildDefaultParams } from '../registry/types';
 import { VOICE_MODULES } from '../timbre/voices';
 import { createInitialHistory } from './HistoryTree';
+import {
+  createStepGridOperatorConfig,
+  migrateProjectTime,
+  migrateSnapshotTime,
+} from './timeMigration';
 import type {
   BeatSnapshot,
   LayerConfig,
@@ -84,7 +89,43 @@ function defaultVoiceParams(voiceModuleId: string): Record<string, number> {
   }
 }
 
+/** Standard-Kette neuer Layer: Groove-Karten (aus) + Rhythmus-Raster. */
 function createDefaultTimeOperators(prefix: string): OperatorConfig[] {
+  return [
+    createDriftOperatorConfig(prefix, true),
+    createSwingOperatorConfig(prefix, true),
+    createStepGridOperatorConfig(prefix),
+    createChanceOperatorConfig(prefix, true),
+  ];
+}
+
+/** Kaleidoskop-Drift (Phasen-Verschiebung pro Zyklus). */
+export function createDriftOperatorConfig(prefix: string, bypassed = false): OperatorConfig {
+  return {
+    id: `${prefix}_time_drift`,
+    moduleId: 'time-phase-drift',
+    version: 1,
+    bypassed,
+    params: { driftSteps: 0.05, resetCycles: 8 },
+  };
+}
+
+/** Zeit-Krümmung (optional). */
+export function createWarpOperatorConfig(prefix: string, bypassed = false): OperatorConfig {
+  return {
+    id: `${prefix}_time_warp`,
+    moduleId: 'time-warp',
+    version: 1,
+    bypassed,
+    params: { warpAmount: 0.15 },
+  };
+}
+
+/**
+ * Alte Kette (Puls-Interferenz & Co.) – nur noch intern für Presets/Demos,
+ * die danach über {@link migrateSnapshotTime} auf das Raster umgerechnet werden.
+ */
+function createLegacyTimeOperators(prefix: string): OperatorConfig[] {
   return [
     {
       id: `${prefix}_time_warp`,
@@ -173,6 +214,7 @@ const TIME_OPERATOR_ORDER: readonly string[] = [
   'time-swing',
   'time-pulse-interference',
   'time-euclid',
+  'time-step-grid',
   'time-chance',
 ];
 
@@ -190,16 +232,28 @@ export const OPTIONAL_TIME_OPERATORS: ReadonlyArray<{
     create: (prefix) => createSwingOperatorConfig(prefix),
   },
   {
-    moduleId: 'time-euclid',
-    label: 'Euklidischer Rhythmus',
-    hint: 'k Schläge gleichmäßig auf n Steps verteilen (Tresillo, Clave, Bossa …)',
-    create: (prefix) => createEuclidOperatorConfig(prefix),
-  },
-  {
     moduleId: 'time-chance',
     label: 'Zufall & Ghost-Notes',
     hint: 'Gewürfelte, wiederholbare Auslassungen und leise Geisternoten',
     create: (prefix) => createChanceOperatorConfig(prefix),
+  },
+  {
+    moduleId: 'time-phase-drift',
+    label: 'Kaleidoskop-Drift',
+    hint: 'Muster wandert pro Zyklus ein Stück und rastet nach N Zyklen wieder ein',
+    create: (prefix) => createDriftOperatorConfig(prefix),
+  },
+  {
+    moduleId: 'time-warp',
+    label: 'Zeit-Krümmung',
+    hint: 'Staucht/dehnt die Zeit im Zyklus – Schläge drängen nach vorn oder hinten',
+    create: (prefix) => createWarpOperatorConfig(prefix),
+  },
+  {
+    moduleId: 'time-step-grid',
+    label: 'Rhythmus-Raster',
+    hint: 'Schläge, Akzente und Haltebögen per Klick setzen',
+    create: (prefix) => createStepGridOperatorConfig(prefix),
   },
 ];
 
@@ -332,6 +386,7 @@ export function createDefaultLayer(
   voiceModuleId: string,
   cycleValue = 4,
   cycleUnit: CycleUnit = 'beats',
+  options: { legacyTime?: boolean } = {},
 ): LayerConfig {
   const id = nextId('layer');
   const colorIndex = presetIdCounter % LAYER_COLORS.length;
@@ -348,7 +403,7 @@ export function createDefaultLayer(
       value: cycleValue,
       unit: cycleUnit,
     },
-    timeOperators: createDefaultTimeOperators(id),
+    timeOperators: options.legacyTime ? createLegacyTimeOperators(id) : createDefaultTimeOperators(id),
     voice: {
       moduleId: voiceModuleId,
       version: 1,
@@ -399,6 +454,9 @@ function findOpId(ops: readonly OperatorConfig[], moduleId: string): string {
   return ops.find((o) => o.moduleId === moduleId)?.id ?? '';
 }
 
+/** Presets werden mit der alten Kette gebaut und am Ende migriert. */
+const LEGACY = { legacyTime: true } as const;
+
 function createHypnoticSnapshot(): BeatSnapshot {
   const curveMorph: DrawnCurveData = {
     id: 'curve_arp_bloom',
@@ -416,7 +474,7 @@ function createHypnoticSnapshot(): BeatSnapshot {
   };
 
   // L1: Kick & Sub-Puls
-  const baseL1 = createDefaultLayer('L1 Kick & Sub-Puls', 'pulse-texture', 4, 'beats');
+  const baseL1 = createDefaultLayer('L1 Kick & Sub-Puls', 'pulse-texture', 4, 'beats', LEGACY);
   const l1Ops = updateOperator(
     updateOperator(baseL1.timeOperators, 'time-pulse-interference', {
       params: { freqA: 4, freqB: 4, interferenceMix: 0, phaseOffset: 0, threshold: 0 },
@@ -456,7 +514,7 @@ function createHypnoticSnapshot(): BeatSnapshot {
   };
 
   // L2: Rollender Offbeat-Bass
-  const baseL2 = createDefaultLayer('L2 Rollender Offbeat-Bass', 'sub-motion', 4, 'beats');
+  const baseL2 = createDefaultLayer('L2 Rollender Offbeat-Bass', 'sub-motion', 4, 'beats', LEGACY);
   const l2Ops = updateOperator(
     updateOperator(baseL2.timeOperators, 'time-grid-gravity', {
       params: { subdivisions: 4, phaseShift: 0.5, gravity: 0.85 },
@@ -513,7 +571,7 @@ function createHypnoticSnapshot(): BeatSnapshot {
   };
 
   // L3: Phasen-Rätsel Holz/Metall (5 Beats gegen 4/4!)
-  const baseL3 = createDefaultLayer('L3 Phasen-Rätsel Holz/Metall', 'pulse-texture', 5, 'beats');
+  const baseL3 = createDefaultLayer('L3 Phasen-Rätsel Holz/Metall', 'pulse-texture', 5, 'beats', LEGACY);
   const l3Ops = updateOperator(
     updateOperator(baseL3.timeOperators, 'time-pulse-interference', {
       params: { freqA: 5, freqB: 3, interferenceMix: 0.62, phaseOffset: 0.2, threshold: 0.42 },
@@ -597,7 +655,7 @@ function createHypnoticSnapshot(): BeatSnapshot {
   };
 
   // L4: Schwebender A-Moll Akkord -> Arp (8 Takte)
-  const baseL4 = createDefaultLayer('L4 A-Moll Akkord → Arp', 'chord-arp', 8, 'bars');
+  const baseL4 = createDefaultLayer('L4 A-Moll Akkord → Arp', 'chord-arp', 8, 'bars', LEGACY);
   const l4Ops = updateOperator(baseL4.timeOperators, 'time-pulse-interference', {
     params: { freqA: 8, freqB: 6, interferenceMix: 0.4, phaseOffset: 0.125, threshold: 0.3 },
   });
@@ -690,7 +748,7 @@ function createHypnoticSnapshot(): BeatSnapshot {
  * Creates the starter Hypnotic A-Minor project with 4 polymetric layers,
  * branching history root, and 3 ready-to-play sections.
  */
-export function createHypnoticAMinorProject(): ProjectDocument {
+function build_createHypnoticAMinorProject(): ProjectDocument {
   const mainSnapshot = createHypnoticSnapshot();
 
   const introSnapshot: BeatSnapshot = {
@@ -772,8 +830,8 @@ export function createHypnoticAMinorProject(): ProjectDocument {
 /**
  * Triplet & polymetric riddle preset (3, 5, 7 beat cycles with phase-drift kaleidoscope).
  */
-export function createTripletRiddlePreset(): BeatSnapshot {
-  const l1Base = createDefaultLayer('Kick 4/4 Anker', 'pulse-texture', 4, 'beats');
+function build_createTripletRiddlePreset(): BeatSnapshot {
+  const l1Base = createDefaultLayer('Kick 4/4 Anker', 'pulse-texture', 4, 'beats', LEGACY);
   const l1: LayerConfig = {
     ...l1Base,
     id: 'tr_kick',
@@ -787,7 +845,7 @@ export function createTripletRiddlePreset(): BeatSnapshot {
     },
   };
 
-  const l2Base = createDefaultLayer('Triolen-Rätsel (3 Beats)', 'pulse-texture', 3, 'beats');
+  const l2Base = createDefaultLayer('Triolen-Rätsel (3 Beats)', 'pulse-texture', 3, 'beats', LEGACY);
   const l2: LayerConfig = {
     ...l2Base,
     id: 'tr_triplet_3',
@@ -807,7 +865,7 @@ export function createTripletRiddlePreset(): BeatSnapshot {
     },
   };
 
-  const l3Base = createDefaultLayer('5-Beat Kaleidoskop', 'sub-motion', 5, 'beats');
+  const l3Base = createDefaultLayer('5-Beat Kaleidoskop', 'sub-motion', 5, 'beats', LEGACY);
   const l3: LayerConfig = {
     ...l3Base,
     id: 'tr_bass_5',
@@ -822,7 +880,7 @@ export function createTripletRiddlePreset(): BeatSnapshot {
     ),
   };
 
-  const l4Base = createDefaultLayer('7-Beat Schimmer', 'chord-arp', 7, 'beats');
+  const l4Base = createDefaultLayer('7-Beat Schimmer', 'chord-arp', 7, 'beats', LEGACY);
   const l4: LayerConfig = {
     ...l4Base,
     id: 'tr_arp_7',
@@ -867,7 +925,7 @@ export function createTripletRiddlePreset(): BeatSnapshot {
  * Demonstrates a standing A-minor chord morphing into an accelerating arpeggio
  * and locking onto the offbeat via coupled drawn-curve routes.
  */
-export function createChordToOffbeatArpPreset(): BeatSnapshot {
+function build_createChordToOffbeatArpPreset(): BeatSnapshot {
   const curveMorph: DrawnCurveData = {
     id: 'curve_chord_to_offbeat',
     name: 'Akkord → Beschleunigung → Offbeat',
@@ -883,7 +941,7 @@ export function createChordToOffbeatArpPreset(): BeatSnapshot {
     ],
   };
 
-  const kickBase = createDefaultLayer('Kick-Fundament', 'pulse-texture', 4, 'beats');
+  const kickBase = createDefaultLayer('Kick-Fundament', 'pulse-texture', 4, 'beats', LEGACY);
   const kick: LayerConfig = {
     ...kickBase,
     id: 'coa_kick',
@@ -897,7 +955,7 @@ export function createChordToOffbeatArpPreset(): BeatSnapshot {
     },
   };
 
-  const arpBase = createDefaultLayer('A-Moll Akkord → Offbeat-Arp', 'chord-arp', 8, 'bars');
+  const arpBase = createDefaultLayer('A-Moll Akkord → Offbeat-Arp', 'chord-arp', 8, 'bars', LEGACY);
   const arpOps = updateOperator(
     updateOperator(arpBase.timeOperators, 'time-grid-gravity', {
       params: { subdivisions: 4, phaseShift: 0.0, gravity: 0.85 },
@@ -1015,9 +1073,9 @@ export function createChordToOffbeatArpPreset(): BeatSnapshot {
  * straight 4/4 kick + sub-pulse, offbeat modal-bell glockenspiel,
  * and pipe-organ layered with a secondary modal-bell voice.
  */
-export function createBellsAndOrganPreset(): BeatSnapshot {
+function build_createBellsAndOrganPreset(): BeatSnapshot {
   // L1: Kick 4/4 Anker
-  const l1Base = createDefaultLayer('L1 Kick 4/4 Anker', 'pulse-texture', 4, 'beats');
+  const l1Base = createDefaultLayer('L1 Kick 4/4 Anker', 'pulse-texture', 4, 'beats', LEGACY);
   const l1Ops = updateOperator(
     updateOperator(l1Base.timeOperators, 'time-pulse-interference', {
       params: { freqA: 4, freqB: 4, interferenceMix: 0, phaseOffset: 0, threshold: 0 },
@@ -1053,7 +1111,7 @@ export function createBellsAndOrganPreset(): BeatSnapshot {
   };
 
   // L2: Sub-Puls
-  const l2Base = createDefaultLayer('L2 Sub-Puls', 'sub-motion', 4, 'beats');
+  const l2Base = createDefaultLayer('L2 Sub-Puls', 'sub-motion', 4, 'beats', LEGACY);
   const l2Ops = updateOperator(
     updateOperator(l2Base.timeOperators, 'time-grid-gravity', {
       params: { subdivisions: 4, phaseShift: 0.5, gravity: 0.7 },
@@ -1085,7 +1143,7 @@ export function createBellsAndOrganPreset(): BeatSnapshot {
   };
 
   // L3: Offbeat-Glockenspiel
-  const l3Base = createDefaultLayer('L3 Offbeat-Glockenspiel', 'modal-bell', 4, 'beats');
+  const l3Base = createDefaultLayer('L3 Offbeat-Glockenspiel', 'modal-bell', 4, 'beats', LEGACY);
   const l3Ops = updateOperator(
     updateOperator(l3Base.timeOperators, 'time-grid-gravity', {
       params: { subdivisions: 4, phaseShift: 0, gravity: 0 },
@@ -1131,7 +1189,7 @@ export function createBellsAndOrganPreset(): BeatSnapshot {
   };
 
   // L4: Orgelpipes + Glocke-Mix (Dual-Voice Combination)
-  const l4Base = createDefaultLayer('L4 Orgelpipes + Glocke-Mix', 'pipe-organ', 8, 'beats');
+  const l4Base = createDefaultLayer('L4 Orgelpipes + Glocke-Mix', 'pipe-organ', 8, 'beats', LEGACY);
   const l4Ops = updateOperator(
     updateOperator(l4Base.timeOperators, 'time-grid-gravity', {
       params: { subdivisions: 4, phaseShift: 0, gravity: 0.35 },
@@ -1207,4 +1265,20 @@ export function createBellsAndOrganPreset(): BeatSnapshot {
     curves: [],
     layers: [l1, l2, l3, l4],
   };
+}
+
+export function createHypnoticAMinorProject(): ProjectDocument {
+  return migrateProjectTime(build_createHypnoticAMinorProject());
+}
+
+export function createTripletRiddlePreset(): BeatSnapshot {
+  return migrateSnapshotTime(build_createTripletRiddlePreset());
+}
+
+export function createChordToOffbeatArpPreset(): BeatSnapshot {
+  return migrateSnapshotTime(build_createChordToOffbeatArpPreset());
+}
+
+export function createBellsAndOrganPreset(): BeatSnapshot {
+  return migrateSnapshotTime(build_createBellsAndOrganPreset());
 }

@@ -78,6 +78,10 @@
 - [x] Voices `hard-kick`, `reese-bass`, `fm-bass`; `sub-motion` + Verzerrung/Ton-Wahl/Tempo-Fix; `HarmonyFrame.keyRootMidi`.
 - [x] Demo „Stahlwerk“ (150 BPM) + Preset-Chip; Splitter für alle Hauptfenster; lesbare Layer-Namen. **61/61 Tests**, Build ✓.
 
+### Welle 11 (Abgeschlossen, Claude Opus 5.5 direkt): Rhythmus-Raster, Töne halten, fester Ton, Bass-Spalte & geordnete Klang-Regler ([`11-rhythmus-raster-und-toene.md`](./11-rhythmus-raster-und-toene.md))
+- [x] `time-step-grid` „Rhythmus-Raster“ (1–64 Steps, Klick-Raster mit Schlag/Akzent/Halten, Spitze, Ton-Länge, Ausklang, Verzögerung, Verschiebung, Euklid-Zusatzschläge) ersetzt Puls-Interferenz/Gravitation/Euklid in der UI; Migration alter Projekte & Presets (`state/timeMigration.ts`).
+- [x] Gate-Signal + „Halten (Sustain)“ für alle Anschlag-Instrumente; fester Einzelton pro Layer (`LayerConfig.pitch`); Bass-Spalte & grundtonlose Akkorde im Baukasten; Klang-Regler in 7 Gruppen mit einheitlichen Bezeichnungen (`voices/paramLayout.ts`). **76/76 Tests**, Build ✓.
+
 ## 4. Gefundene Fehler, Probleme & Wichtige Erkenntnisse
 - **Ursache für unregelmäßigen `Four-on-the-Floor` (gelöst in WP-10/WP-11)**: `interferenceEnergy` verwendete vorher `Math.sin` (startete auf der Zählzeit bei `0.5` unipolar statt auf dem Gipfel `1.0`), `time-pulse-interference` feuerte teils doppelt (`crossedThreshold` + `steppedInEnergy`) und `Four-on-the-Floor` mischte `freqB = 1` (`0.2`) + `threshold = 0.52` + `gravity = 0.9` ein. Durch Cosinus-Ausrichtung, analytische Wellenkamm-Erkennung (`pulseSlope`), `0`-Defaults und sauberes Preset läuft `Four-on-the-Floor` jetzt exakt auf Beat 1, 2, 3, 4.
 - **Umgebungs-Check (15.11.2026)**: `node` v26.9.0 & `npm` 12.2.0 installiert; `git` mit Initial-Commit (`048322d`) eingerichtet.

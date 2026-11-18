@@ -9,6 +9,12 @@ import {
   type ChordCategory,
 } from '../../core/theory/harmony';
 import {
+  getHeptatonicIntervals,
+  NOTE_NAMES,
+  normalizePitchClass,
+} from '../../core/theory/scales';
+import {
+  BASS_MODE_LABELS,
   buildHarmonyTimeline,
   findStepIndexAtBeat,
   MAX_CUSTOM_STEPS,
@@ -17,6 +23,7 @@ import {
   MIN_STEP_BEATS,
   presetToCustomSteps,
   previewDegreeChord,
+  type BassMode,
   type ChordStepConfig,
   type ChordTransitionType,
 } from '../../core/theory/progression';
@@ -146,6 +153,11 @@ export function HarmonyBuilderPanel({
     const label = PROGRESSION_PRESETS[progressionId as keyof typeof PROGRESSION_PRESETS]?.label;
     commitSteps(steps, `Vorlage in Baukasten geladen: ${label ?? progressionId}`);
   };
+
+  const keyPc = normalizePitchClass(harmony.rootNote);
+  const keyScale = getHeptatonicIntervals(harmony.scaleId);
+  const degreeNoteName = (degree: number, accidental: number): string =>
+    NOTE_NAMES[(((keyPc + (keyScale[degree] ?? 0) + accidental) % 12) + 12) % 12] ?? '';
 
   const moveStep = (idx: number, dir: -1 | 1) => {
     const j = idx + dir;
@@ -391,17 +403,44 @@ export function HarmonyBuilderPanel({
       )}
 
       {timeline.steps.length > 1 && (
-        <div className="chord-overview" title="Übersicht der ganzen Folge (Breite = Haltedauer)">
-          {timeline.steps.map((st, idx) => (
-            <div
-              key={`ov-${idx}`}
-              className={`chord-overview-seg${idx === activeIdx ? ' is-playing' : ''}`}
-              style={{ flexGrow: st.durationBeats }}
-              title={`#${idx + 1} ${st.degreeLabel} · ${st.chordName} · ${formatBeats(st.durationBeats, beatsPerBar)}`}
-            >
-              {st.chordName}
-            </div>
-          ))}
+        <div className="chord-overview-lane">
+          <span className="chord-overview-lane-label">Akkord</span>
+          <div className="chord-overview" title="Übersicht der ganzen Folge (Breite = Haltedauer)">
+            {timeline.steps.map((st, idx) => (
+              <div
+                key={`ov-${idx}`}
+                className={`chord-overview-seg${idx === activeIdx ? ' is-playing' : ''}`}
+                style={{ flexGrow: st.durationBeats }}
+                title={`#${idx + 1} ${st.degreeLabel} · ${st.chordName} · ${formatBeats(st.durationBeats, beatsPerBar)}`}
+              >
+                {st.chordName}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {timeline.steps.length > 0 && (isCustom || timeline.steps.length > 1) && (
+        <div className="chord-overview-lane">
+          <span className="chord-overview-lane-label">Bass</span>
+          <div
+            className="chord-overview is-bass"
+            title="Bass-Spur: welcher Ton die Bass-Instrumente (Sub, Acid, Reese, FM) unter jedem Akkord spielen"
+          >
+            {timeline.steps.map((st, idx) => (
+              <div
+                key={`bass-${idx}`}
+                className={`chord-overview-seg${st.bassPc < 0 ? ' is-rest' : ''}${idx === activeIdx ? ' is-playing' : ''}`}
+                style={{ flexGrow: st.durationBeats }}
+                title={
+                  st.bassPc < 0
+                    ? `#${idx + 1}: Bass pausiert`
+                    : `#${idx + 1}: Bass ${NOTE_NAMES[st.bassPc] ?? ''}${st.bassPc !== st.rootPc ? ' (Umkehrung / Slash-Akkord)' : ''}`
+                }
+              >
+                {st.bassPc < 0 ? '–' : NOTE_NAMES[st.bassPc]}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -532,6 +571,82 @@ export function HarmonyBuilderPanel({
                     </select>
                   </div>
 
+                  <div className="chord-bass-row">
+                    <span className="chord-bass-label">Bass</span>
+                    <div className="chord-step-fields">
+                      <select
+                        value={cfg.bass ?? 'root'}
+                        onChange={(e) => {
+                          const bass = e.target.value as BassMode;
+                          updateStep(
+                            idx,
+                            bass === 'degree'
+                              ? { bass, bassDegree: cfg.bassDegree ?? cfg.degree, bassAccidental: cfg.bassAccidental ?? 0 }
+                              : { bass },
+                            `Bass: ${BASS_MODE_LABELS[bass]}`,
+                          );
+                        }}
+                        title="Welcher Ton im Bass liegt – Umkehrungen legen Terz, Quinte oder Septime nach unten"
+                        style={{ flex: '1 1 100%', minWidth: 0 }}
+                      >
+                        {(Object.keys(BASS_MODE_LABELS) as BassMode[]).map((m) => (
+                          <option key={m} value={m}>
+                            {BASS_MODE_LABELS[m]}
+                          </option>
+                        ))}
+                      </select>
+                      {cfg.bass === 'degree' && (
+                        <>
+                          <select
+                            value={cfg.bassAccidental ?? 0}
+                            onChange={(e) =>
+                              updateStep(
+                                idx,
+                                { bassAccidental: Number(e.target.value) as -1 | 0 | 1 },
+                                'Basston-Alteration geändert',
+                              )
+                            }
+                            title="Basston erniedrigen / erhöhen"
+                          >
+                            <option value={-1}>b</option>
+                            <option value={0}>♮</option>
+                            <option value={1}>#</option>
+                          </select>
+                          <select
+                            value={cfg.bassDegree ?? 0}
+                            onChange={(e) =>
+                              updateStep(idx, { bassDegree: Number(e.target.value) }, 'Basston geändert')
+                            }
+                            title="Freier Basston (Skalenstufe)"
+                          >
+                            {ROMAN.map((r, d) => (
+                              <option key={r} value={d}>
+                                {r} · {degreeNoteName(d, cfg.bassAccidental ?? 0)}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    </div>
+                    <label
+                      className="inline-check"
+                      title="Grundtonloses Voicing: Akkord-Instrumente lassen den Grundton weg (er liegt z. B. nur im Bass oder fehlt ganz)"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cfg.omitRoot === true}
+                        onChange={(e) =>
+                          updateStep(
+                            idx,
+                            { omitRoot: e.target.checked },
+                            e.target.checked ? 'Akkord ohne Grundton' : 'Akkord mit Grundton',
+                          )
+                        }
+                      />
+                      Akkord ohne Grundton
+                    </label>
+                  </div>
+
                   <div className="chord-step-fields">
                     <span className="muted-note">Halten</span>
                     {[1, 2, 4, 8, 16].map((b) => (
@@ -621,7 +736,12 @@ export function HarmonyBuilderPanel({
               )}
 
               <div className="chord-voicing" title="Berechnete Töne dieses Akkords">
-                Bass {midiToNoteLabel(st.frame.rootMidi)} · {voicing}
+                Bass{' '}
+                {st.bassPc < 0
+                  ? '– (Pause)'
+                  : midiToNoteLabel(st.frame.bassMidi ?? st.frame.rootMidi)}{' '}
+                · {voicing}
+                {st.omitRoot ? ' (ohne Grundton)' : ''}
               </div>
             </div>
           );

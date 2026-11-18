@@ -716,7 +716,7 @@ describe('DSP Engine Sanity & Contracts', () => {
 
   it('PipeOrganVoice droneHold=1 holds continuous steady audio during pulse troughs and bypassing time-pulse-interference sustains across bars', () => {
     const sampleRate = 48000;
-    const baseLayer = createDefaultLayer('Organ Drone', 'pipe-organ', 4, 'beats');
+    const baseLayer = createDefaultLayer('Organ Drone', 'pipe-organ', 4, 'beats', { legacyTime: true });
 
     const droneLayer: LayerConfig = {
       ...baseLayer,
@@ -872,7 +872,7 @@ describe('DSP Engine Sanity & Contracts', () => {
 
   it('ChordArpVoice droneHold=1 holds continuous steady audio across peak and trough halves of time-pulse-interference', () => {
     const sampleRate = 48000;
-    const baseLayer = createDefaultLayer('Chord Drone', 'chord-arp', 4, 'beats');
+    const baseLayer = createDefaultLayer('Chord Drone', 'chord-arp', 4, 'beats', { legacyTime: true });
 
     const droneLayer: LayerConfig = {
       ...baseLayer,

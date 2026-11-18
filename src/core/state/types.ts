@@ -63,6 +63,18 @@ export interface SecondaryVoiceConfig {
   readonly params: Record<string, number>;
 }
 
+/**
+ * Where a layer takes its notes from: the chord progression (default) or a
+ * single fixed note, decoupled from the chords.
+ */
+export interface LayerPitchConfig {
+  readonly mode: 'harmony' | 'fixed';
+  /** Pitch class 0..11 (C..B) for mode 'fixed'. */
+  readonly note: number;
+  /** Octave offset (-2..+2) relative to the normal register. */
+  readonly octave: number;
+}
+
 export interface LayerConfig {
   readonly id: string;
   readonly name: string;
@@ -85,6 +97,8 @@ export interface LayerConfig {
     readonly params: Record<string, number>;
   };
   readonly secondaryVoice?: SecondaryVoiceConfig;
+  /** Optional pitch source (default: follows the harmony). */
+  readonly pitch?: LayerPitchConfig;
   readonly processorChain: readonly ProcessorCardConfig[];
   readonly modulations: readonly ModulationRouteConfig[];
 }

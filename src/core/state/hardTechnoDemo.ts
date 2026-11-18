@@ -1,3 +1,4 @@
+import { migrateProjectTime, migrateSectionsTime } from './timeMigration';
 import { base, chain, lfo, voice, withEuclid, withPulse } from './demoSong';
 import { createInitialHistory } from './HistoryTree';
 import { updateOperator } from './presets';
@@ -272,7 +273,7 @@ function snapshot(id: string, layers: LayerConfig[], progressionId: string): Bea
 const mute = (l: LayerConfig): LayerConfig => ({ ...l, muted: true });
 const lvl = (l: LayerConfig, level: number): LayerConfig => ({ ...l, level });
 
-export function createHardtechnoSections(): SectionItem[] {
+function buildHardtechnoSections(): SectionItem[] {
   const L = buildLayers();
   const all = (o: Partial<HtLayers>): LayerConfig[] => {
     const m = { ...L, ...o };
@@ -310,7 +311,7 @@ export function createHardtechnoSections(): SectionItem[] {
   ];
 }
 
-export function createHardtechnoProject(): ProjectDocument {
+function buildHardtechnoProject(): ProjectDocument {
   const sections = createHardtechnoSections();
   const active = sections[1]!.snapshot;
   const history = createInitialHistory(active, 'Demo „Stahlwerk“ (Hardtechno) geladen');
@@ -324,4 +325,12 @@ export function createHardtechnoProject(): ProjectDocument {
     historyNodes: history.nodes,
     sections,
   };
+}
+
+export function createHardtechnoSections(): SectionItem[] {
+  return migrateSectionsTime(buildHardtechnoSections());
+}
+
+export function createHardtechnoProject(): ProjectDocument {
+  return migrateProjectTime(buildHardtechnoProject());
 }

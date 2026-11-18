@@ -107,7 +107,8 @@ export class TechnoEngine {
       chordPreset: first.chordPreset,
       scaleNotesMidi: first.scaleNotesMidi,
       chordNotesMidi: first.chordNotesMidi,
-      bassMidi: first.rootMidi,
+      bassMidi: first.bassMidi ?? first.rootMidi,
+      bassRest: first.bassRest === true,
       nextChordNotesMidi: first.chordNotesMidi,
       transitionType: 'cut',
       transitionProgress: 0,
@@ -360,7 +361,8 @@ export class TechnoEngine {
     lh.rootNote = f.rootNote;
     lh.rootMidi = f.rootMidi;
     lh.keyRootMidi = f.keyRootMidi ?? f.rootMidi;
-    lh.bassMidi = f.rootMidi;
+    lh.bassMidi = f.bassMidi ?? f.rootMidi;
+    lh.bassRest = f.bassRest === true;
     lh.scaleId = f.scaleId;
     lh.chordPreset = f.chordPreset;
     lh.scaleNotesMidi = f.scaleNotesMidi;

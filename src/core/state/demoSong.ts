@@ -1,3 +1,4 @@
+import { migrateProjectTime, migrateSectionsTime } from './timeMigration';
 import type { ChordStepConfig } from '../theory/progression';
 import { createInitialHistory } from './HistoryTree';
 import {
@@ -89,7 +90,7 @@ export function base(
   cycleValue = 4,
   cycleUnit: 'beats' | 'bars' = 'beats',
 ): LayerConfig {
-  const l = createDefaultLayer(name, voiceId, cycleValue, cycleUnit);
+  const l = createDefaultLayer(name, voiceId, cycleValue, cycleUnit, { legacyTime: true });
   return { ...l, id, color, group };
 }
 
@@ -446,7 +447,7 @@ const chanceOf = (l: LayerConfig, chance: number): LayerConfig => ({
 });
 
 /** Baut alle sechs Abschnitte des Demo-Songs. */
-export function createNachtschichtSections(): SectionItem[] {
+function buildNachtschichtSections(): SectionItem[] {
   const L = buildLayers();
   // Layer-Reihenfolge ist in allen Abschnitten gleich (übersichtlich in der Layer-Liste).
   const all = (o: Partial<DemoLayers>): LayerConfig[] => {
@@ -541,7 +542,7 @@ export function createNachtschichtSections(): SectionItem[] {
 }
 
 /** Komplettes Projekt mit allen Abschnitten; aktiver Beat = Peak. */
-export function createNachtschichtProject(): ProjectDocument {
+function buildNachtschichtProject(): ProjectDocument {
   const sections = createNachtschichtSections();
   const active = sections[2]!.snapshot;
   const history = createInitialHistory(active, 'Demo-Song „Nachtschicht“ geladen');
@@ -555,4 +556,12 @@ export function createNachtschichtProject(): ProjectDocument {
     historyNodes: history.nodes,
     sections,
   };
+}
+
+export function createNachtschichtSections(): SectionItem[] {
+  return migrateSectionsTime(buildNachtschichtSections());
+}
+
+export function createNachtschichtProject(): ProjectDocument {
+  return migrateProjectTime(buildNachtschichtProject());
 }

@@ -288,6 +288,7 @@ describe('Phase & Time Math', () => {
         accent: 0,
         stepIndex: -1,
         pulseSlope: 0,
+        gate: 0,
       };
       const triggers: Array<{ beat: number; intensity: number }> = [];
 
@@ -310,6 +311,7 @@ describe('Phase & Time Math', () => {
           accent: prevFrame.accent,
           stepIndex: prevFrame.stepIndex,
           pulseSlope: prevFrame.pulseSlope,
+          gate: prevFrame.gate,
         };
         const outFrame: MutableTimeFrame = {
           warpedPhase: 0,
@@ -318,6 +320,7 @@ describe('Phase & Time Math', () => {
           accent: 0,
           stepIndex: 0,
           pulseSlope: 0,
+          gate: 0,
         };
         timePulseInterferenceOperator.evaluateTimeInto!(ctx, params, inFrame, outFrame);
 
@@ -404,6 +407,7 @@ describe('Phase & Time Math', () => {
       accent: 0,
       stepIndex: -1,
       pulseSlope: 0,
+      gate: 0,
     };
     const triggers: number[] = [];
     const params = {
@@ -434,6 +438,7 @@ describe('Phase & Time Math', () => {
         accent: prevFrame.accent,
         stepIndex: prevFrame.stepIndex,
         pulseSlope: prevFrame.pulseSlope,
+        gate: prevFrame.gate,
       };
       const outFrame: MutableTimeFrame = {
         warpedPhase: 0,
@@ -442,6 +447,7 @@ describe('Phase & Time Math', () => {
         accent: 0,
         stepIndex: 0,
         pulseSlope: 0,
+        gate: 0,
       };
       timePulseInterferenceOperator.evaluateTimeInto!(ctx, params, inFrame, outFrame);
       if (outFrame.triggerIntensity > 0) {

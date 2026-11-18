@@ -5,7 +5,7 @@ import type {
   VoiceModule,
   VoiceRenderContext,
 } from '../../registry/types';
-import { clamp01, decayCoeff, detectNewTrigger, fastTanh, readParam } from './voiceUtils';
+import { clamp01, decayCoeff, detectNewTrigger, fastTanh, NoteHold, readParam, SUSTAIN_PARAM } from './voiceUtils';
 
 /**
  * Hi-Hat & Becken: sechs inharmonische Rechteck-Oszillatoren (klassische
@@ -92,6 +92,8 @@ const WIDTH_PARAM: ParameterSchema = {
 };
 
 export class MetalHatVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly phases = new Float64Array(NUM_OSC);
   private readonly incs = new Float64Array(NUM_OSC);
@@ -120,6 +122,7 @@ export class MetalHatVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.env = 0;
     this.attack = 1;
     this.vel = 0;
@@ -149,6 +152,7 @@ export class MetalHatVoice implements VoiceInstance {
     const tune = readParam(TUNE_PARAM, params);
     const dynamics = readParam(DYNAMICS_PARAM, params);
     const width = readParam(WIDTH_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     if (tune !== this.lastTune) {
       this.lastTune = tune;
@@ -170,8 +174,10 @@ export class MetalHatVoice implements VoiceInstance {
       this.vel = clamp(1 - dynamics + dynamics * raw, 0.12, 1);
       // Choke: neuer Schlag schneidet den alten ab (wie bei einer echten Hi-Hat)
       this.env = this.vel;
+      this.holdVel = this.vel;
       this.attack = 0;
     }
+    const holdFloor = this.hold.floor(ctx, trig, sustain, this.holdVel);
 
     const bpHz = clamp(6000 + tone * 6500, 2000, sr * 0.42);
     const hpHz = clamp(4200 + tone * 4200, 1500, sr * 0.4);
@@ -223,6 +229,7 @@ export class MetalHatVoice implements VoiceInstance {
       outL[i] = oL * 0 === 0 ? oL : 0;
       outR[i] = oR * 0 === 0 ? oR : 0;
       env *= envCoeff;
+      if (env < holdFloor) env = holdFloor;
     }
     this.env = env;
     this.attack = attack;

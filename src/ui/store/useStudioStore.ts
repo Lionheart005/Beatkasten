@@ -13,6 +13,7 @@ import {
   createChordToOffbeatArpPreset,
   createTripletRiddlePreset,
   jumpToHistoryNode,
+  migrateProjectTime,
   repairProjectIds,
   stepRedoFirstChild,
   stepUndo,
@@ -303,7 +304,7 @@ export function useStudioStore() {
         setSavedProjects(list);
         if (list.length > 0) {
           const loadedRaw = await idbAdapterSingleton.loadProject(list[0]!.id);
-          const loaded = loadedRaw ? repairProjectIds(loadedRaw) : null;
+          const loaded = loadedRaw ? repairProjectIds(migrateProjectTime(loadedRaw)) : null;
           if (!cancelled && loaded) {
             setProject(loaded);
             setActiveSectionId(null);
@@ -1479,7 +1480,7 @@ export function useStudioStore() {
           ? ((await fsAdapterSingleton.loadProject(projectIdOrName)) ??
             (await idbAdapterSingleton.loadProject(projectIdOrName)))
           : await idbAdapterSingleton.loadProject(projectIdOrName);
-        const loaded = loadedRaw ? repairProjectIds(loadedRaw) : null;
+        const loaded = loadedRaw ? repairProjectIds(migrateProjectTime(loadedRaw)) : null;
         if (!loaded) {
           showNotice('Projekt konnte nicht geladen werden.');
           return;

@@ -34,6 +34,45 @@ export function detectNewTrigger(ctx: VoiceRenderContext): number {
   return trig > 0.01 && prevTrig <= 0.01 ? trig : 0;
 }
 
+/**
+ * Gemeinsamer Regler aller Anschlag-Instrumente: Wie laut der Ton stehen bleibt,
+ * solange die Note gehalten wird (Ton-Länge / Haltebögen im Rhythmus-Raster).
+ */
+export const SUSTAIN_PARAM: ParameterSchema = {
+  id: 'sustain',
+  label: 'Halten (Sustain)',
+  description:
+    'Wie laut der Ton stehen bleibt, solange die Note gehalten wird (Ton-Länge / Haltebögen im Rhythmus-Raster). 0 = klingt frei aus wie bisher, 1 = bleibt voll stehen bis zum Loslassen.',
+  domain: 'timbre',
+  min: 0,
+  max: 1,
+  defaultValue: 0,
+  curve: 'linear',
+  modulatable: true,
+  group: 'envelope',
+};
+
+/**
+ * Halte-Logik für Anschlag-Hüllkurven: liefert die Untergrenze der Amplitude,
+ * solange die angeschlagene Note gehalten wird (0 = freies Ausklingen).
+ */
+export class NoteHold {
+  private active = false;
+
+  public reset(): void {
+    this.active = false;
+  }
+
+  /** Einmal pro Block aufrufen (nach der Trigger-Erkennung). */
+  public floor(ctx: VoiceRenderContext, newTrig: number, sustain: number, level: number): number {
+    const gate = ctx.timeFrame.gate;
+    const open = gate !== undefined && gate > 0.5;
+    if (newTrig > 0 && open) this.active = true;
+    if (!open) this.active = false;
+    return this.active && sustain > 1e-4 ? sustain * level : 0;
+  }
+}
+
 /** Zeitkonstante (Sekunden) → Multiplikator pro Sample. */
 export function decayCoeff(tauSeconds: number, sampleRate: number): number {
   return Math.exp(-1 / (Math.max(1e-4, tauSeconds) * sampleRate));

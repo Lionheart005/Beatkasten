@@ -13,6 +13,7 @@ import {
   type VoiceRenderContext,
 } from '../../registry/types';
 import { midiToFreq } from '../../theory';
+import { NoteHold, SUSTAIN_PARAM } from './voiceUtils';
 
 const TWO_PI = Math.PI * 2;
 
@@ -111,6 +112,8 @@ function readParam(schema: ParameterSchema, params: Record<string, number>): num
 }
 
 export class PulseTextureVoice implements VoiceInstance {
+  private readonly hold = new NoteHold();
+  private holdVel = 1;
   private readonly sampleRate: number;
   private readonly bodyOsc: PolyBlepOscillator;
   private readonly harm2Osc: PolyBlepOscillator;
@@ -178,6 +181,7 @@ export class PulseTextureVoice implements VoiceInstance {
   }
 
   public reset(): void {
+    this.hold.reset();
     this.bodyOsc.reset(0);
     this.harm2Osc.reset(0);
     this.harm3Osc.reset(0);
@@ -217,6 +221,7 @@ export class PulseTextureVoice implements VoiceInstance {
     const snap = readParam(SNAP_PARAM, params);
     const pitchOffset = readParam(PITCH_OFFSET_PARAM, params);
     const targetToneColor = readParam(TONE_COLOR_PARAM, params);
+    const sustain = readParam(SUSTAIN_PARAM, params);
 
     const trig = Number.isFinite(ctx.timeFrame.triggerIntensity)
       ? clamp(ctx.timeFrame.triggerIntensity, 0, 1)
@@ -236,11 +241,14 @@ export class PulseTextureVoice implements VoiceInstance {
         this.harm3Osc.reset(0);
       }
       this.bodyEnv = Math.max(this.bodyEnv * 0.25, vel);
+      this.holdVel = vel;
       this.pitchEnv = 1;
       this.snapEnv = vel;
       this.airEnv = Math.max(this.airEnv * 0.3, vel * (0.45 + 0.55 * accent));
       this.attackRamp = 0;
     }
+
+    const holdFloor = this.hold.floor(ctx, isNewTrigger ? 1 : 0, sustain, this.holdVel);
 
     // Fold harmony root into warm kick fundamental octave [30..41] (~46..87 Hz),
     // then apply user pitchOffset freely in semitones.
@@ -369,6 +377,7 @@ export class PulseTextureVoice implements VoiceInstance {
         airBufR[k] = nR;
 
         bodyEnv *= bodyDecayCoeff;
+        if (bodyEnv < holdFloor) bodyEnv = holdFloor;
         pitchEnv *= pitchDecayCoeff;
       }
 

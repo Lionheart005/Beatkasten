@@ -11,6 +11,9 @@ import { pipeOrganVoiceModule } from './PipeOrganVoice';
 import { pulseTextureVoiceModule } from './PulseTextureVoice';
 import { reeseBassVoiceModule } from './ReeseBassVoice';
 import { subMotionVoiceModule } from './SubMotionVoice';
+import { applyParamLayout } from './paramLayout';
+
+export { applyParamLayout, VOICE_PARAM_LAYOUT } from './paramLayout';
 
 export { AcidLineVoice, acidLineVoiceModule } from './AcidLineVoice';
 export { ChordArpVoice, chordArpVoiceModule } from './ChordArpVoice';
@@ -38,4 +41,4 @@ export const VOICE_MODULES: readonly VoiceModule[] = [
   modalBellVoiceModule,
   pipeOrganVoiceModule,
   noiseRiserVoiceModule,
-];
+].map(applyParamLayout);

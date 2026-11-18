@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LiveTelemetry } from '../../audio-host';
 import { defaultRegistry } from '../../core/defaultRegistry';
+import { isPulseGeneratorModule } from '../../core/time/operators';
 import type { TimeFrame } from '../../core/registry/types';
 import type { LayerConfig } from '../../core/state/types';
 import { cycleToBeats } from '../../core/theory/cycles';
@@ -176,10 +177,7 @@ export function TimePreviewCanvas({
         const mod = defaultRegistry.getTimeOperator(opCfg.moduleId);
         if (!mod) continue;
         const hadPulseSource = hasPulseGenerator;
-        if (
-          opCfg.moduleId === 'time-pulse-interference' ||
-          opCfg.moduleId === 'time-euclid'
-        ) {
+        if (isPulseGeneratorModule(opCfg.moduleId)) {
           hasPulseGenerator = true;
         }
         frame = mod.evaluateTime(
