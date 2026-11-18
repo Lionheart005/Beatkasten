@@ -11,6 +11,7 @@ import { pipeOrganVoiceModule } from './PipeOrganVoice';
 import { pulseTextureVoiceModule } from './PulseTextureVoice';
 import { reeseBassVoiceModule } from './ReeseBassVoice';
 import { subMotionVoiceModule } from './SubMotionVoice';
+import { samplePlayerVoiceModule } from './SamplePlayerVoice';
 import { applyParamLayout } from './paramLayout';
 
 export { applyParamLayout, VOICE_PARAM_LAYOUT } from './paramLayout';
@@ -27,6 +28,7 @@ export { ModalBellVoice, modalBellVoiceModule } from './ModalBellVoice';
 export { PipeOrganVoice, pipeOrganVoiceModule } from './PipeOrganVoice';
 export { PulseTextureVoice, pulseTextureVoiceModule } from './PulseTextureVoice';
 export { SubMotionVoice, subMotionVoiceModule } from './SubMotionVoice';
+export { SamplePlayerVoice, samplePlayerVoiceModule } from './SamplePlayerVoice';
 
 export const VOICE_MODULES: readonly VoiceModule[] = [
   pulseTextureVoiceModule,
@@ -41,4 +43,5 @@ export const VOICE_MODULES: readonly VoiceModule[] = [
   modalBellVoiceModule,
   pipeOrganVoiceModule,
   noiseRiserVoiceModule,
+  samplePlayerVoiceModule,
 ].map(applyParamLayout);

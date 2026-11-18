@@ -27,7 +27,14 @@ import {
   type ChordStepConfig,
   type ChordTransitionType,
 } from '../../core/theory/progression';
+import {
+  CLASSICAL_TEMPLATES,
+  resolveClassicalTemplate,
+  type ClassicalTemplateId,
+} from '../../core/theory/classicalChords';
 import { nextUiId } from '../store/useStudioStore';
+
+const PALETTE_TEMPLATES = Object.values(CLASSICAL_TEMPLATES).filter((t) => t.inPalette);
 
 interface HarmonyBuilderPanelProps {
   snapshot: BeatSnapshot;
@@ -125,8 +132,44 @@ export function HarmonyBuilderPanel({
   };
 
   const updateStep = (idx: number, patch: Partial<ChordStepConfig>, label: string) => {
-    const next = customSteps.map((st, i) => (i === idx ? { ...st, ...patch } : st));
+    // Editing degree / accidental / colour by hand detaches a function template.
+    const detach =
+      patch.templateId === undefined &&
+      ('degree' in patch || 'accidental' in patch || 'chordType' in patch);
+    const next = customSteps.map((st, i) => {
+      if (i !== idx) return st;
+      const merged = { ...st, ...patch };
+      if (!detach) return merged;
+      const { templateId: _drop, ...rest } = merged;
+      return rest;
+    });
     commitSteps(next, label);
+  };
+
+  const templateFields = (id: ClassicalTemplateId): Partial<ChordStepConfig> => {
+    const r = resolveClassicalTemplate(id, harmony.scaleId);
+    return {
+      degree: r.degree,
+      accidental: r.accidental,
+      chordType: r.chordType,
+      bass: r.bass,
+      templateId: id,
+    };
+  };
+
+  const appendTemplate = (id: ClassicalTemplateId) => {
+    if (customSteps.length >= MAX_CUSTOM_STEPS) return;
+    const step: ChordStepConfig = {
+      id: nextUiId('chord'),
+      degree: 0,
+      accidental: 0,
+      chordType: 'auto',
+      durationBeats: newDuration,
+      transitionType: 'cut',
+      transitionBeats: 0,
+      ...templateFields(id),
+    };
+    commitSteps([...customSteps, step], `Akkord hinzugefügt: ${CLASSICAL_TEMPLATES[id].label}`);
   };
 
   const appendStep = (degree: number, accidental: -1 | 0 | 1) => {
@@ -238,6 +281,15 @@ export function HarmonyBuilderPanel({
           <optgroup label="Kadenzen (leitereigen)">
             {Object.values(PROGRESSION_PRESETS)
               .filter((p) => p.group === 'cadence')
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+          </optgroup>
+          <optgroup label="Klassische Kadenzen">
+            {Object.values(PROGRESSION_PRESETS)
+              .filter((p) => p.group === 'classical')
               .map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -392,6 +444,27 @@ export function HarmonyBuilderPanel({
         })}
       </div>
 
+      <div className="degree-bar">
+        <span className="muted-note">Klassisch:</span>
+        {PALETTE_TEMPLATES.map((tpl) => {
+          const r = resolveClassicalTemplate(tpl.id, harmony.scaleId);
+          const p = previewDegreeChord(harmony, r.degree, r.accidental, r.chordType);
+          return (
+            <button
+              key={tpl.id}
+              type="button"
+              className="degree-btn is-classical"
+              disabled={customSteps.length >= MAX_CUSTOM_STEPS}
+              onClick={() => appendTemplate(tpl.id)}
+              title={`${tpl.label} (${p.name}): ${tpl.hint}`}
+            >
+              <span className="degree-roman">{tpl.symbol}</span>
+              <span className="degree-name">{p.name}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {!isCustom && (
         <div className="muted-note" style={{ padding: '0 2px' }}>
           Es läuft die Preset-Folge „
@@ -456,8 +529,9 @@ export function HarmonyBuilderPanel({
             >
               <div className="chord-step-head">
                 <span className="chord-step-label">
-                  <span className="chord-step-index">#{idx + 1}</span> <b>{st.degreeLabel}</b> ·{' '}
-                  {st.chordName}
+                  <span className="chord-step-index">#{idx + 1}</span>{' '}
+                  {st.functionLabel && <span className="chord-step-fn">{st.functionLabel}</span>}{' '}
+                  <b>{st.degreeLabel}</b> · {st.chordName}
                 </span>
                 {cfg && (
                   <div style={{ display: 'flex', gap: 2 }}>
@@ -567,6 +641,41 @@ export function HarmonyBuilderPanel({
                               </option>
                             ))}
                         </optgroup>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="chord-step-fields">
+                    <select
+                      value={cfg.templateId ?? ''}
+                      onChange={(e) => {
+                        const id = e.target.value as ClassicalTemplateId | '';
+                        if (!id) {
+                          // Keep the chord as it sounds now, just without the template.
+                          const frozen = cfg.templateId
+                            ? templateFields(cfg.templateId as ClassicalTemplateId)
+                            : {};
+                          updateStep(
+                            idx,
+                            {
+                              degree: frozen.degree ?? cfg.degree,
+                              accidental: frozen.accidental ?? cfg.accidental,
+                              chordType: frozen.chordType ?? cfg.chordType,
+                            },
+                            'Funktion gelöst',
+                          );
+                          return;
+                        }
+                        updateStep(idx, templateFields(id), `Funktion: ${CLASSICAL_TEMPLATES[id].label}`);
+                      }}
+                      title="Klassische Funktion: setzt Stufe, Farbe und Bass passend zur Tonart"
+                      style={{ flex: 1, minWidth: 0 }}
+                    >
+                      <option value="">Funktion: frei</option>
+                      {PALETTE_TEMPLATES.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.symbol} · {tpl.label}
+                        </option>
                       ))}
                     </select>
                   </div>

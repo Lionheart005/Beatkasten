@@ -3,3 +3,4 @@ export * from './harmony';
 export * from './cycles';
 export * from './voiceLeading';
 export * from './progression';
+export * from './classicalChords';

@@ -1,0 +1,3 @@
+timeline:
+Einstellungen wie Lautstärke und Pan der gesammten spur auch in den spur einstellungen, außerdem den wert anzeigen als zahl. 
+

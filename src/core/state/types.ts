@@ -3,6 +3,9 @@ import type { WaveformType } from '../math/waves';
 import type { CycleUnit } from '../theory/cycles';
 import type { ChordStepConfig, ProgressionMode } from '../theory/progression';
 
+import type { ArrangementDoc } from '../arrangement/types';
+import type { AudioAssetMeta } from '../audio/types';
+
 export type { ChordStepConfig, ProgressionMode };
 
 export interface OperatorConfig {
@@ -25,7 +28,9 @@ export type ModulationSourceType =
   | 'wave-lfo'
   | 'layer-pulse'
   | 'drawn-curve'
-  | 'macro-arc';
+  | 'macro-arc'
+  /** Timeline keyframes (written by the ArrangementEngine into a slot). */
+  | 'external';
 
 export type ModulationTargetDomain =
   | 'voice'
@@ -47,6 +52,8 @@ export interface ModulationRouteConfig {
     readonly cycleUnit?: CycleUnit;
     readonly phaseOffset?: number;
     readonly curveId?: string;
+    /** 'external': slot index of the timeline value. */
+    readonly externalSlot?: number;
   };
   readonly targetDomain: ModulationTargetDomain;
   readonly targetCardId: string;
@@ -101,6 +108,18 @@ export interface LayerConfig {
   readonly pitch?: LayerPitchConfig;
   readonly processorChain: readonly ProcessorCardConfig[];
   readonly modulations: readonly ModulationRouteConfig[];
+  /** Sample instrument: which sound of the audio pool and how it is played. */
+  readonly sample?: LayerSampleConfig;
+}
+
+export interface LayerSampleConfig {
+  readonly assetId: string;
+  readonly rootMidi: number;
+  readonly startSec: number;
+  readonly endSec: number;
+  readonly loop?: { readonly startSec: number; readonly endSec: number; readonly crossfadeSec: number };
+  /** Slice start points (seconds). */
+  readonly slices?: readonly number[];
 }
 
 export interface BeatSnapshot {
@@ -155,4 +174,8 @@ export interface ProjectDocument {
   readonly activeHistoryNodeId: string;
   readonly historyNodes: readonly HistoryNode[];
   readonly sections: readonly SectionItem[];
+  /** Timeline workspace (absent in projects from before the timeline). */
+  readonly arrangement?: ArrangementDoc;
+  /** Audio pool metadata (PCM lives in the asset store, never in JSON). */
+  readonly assets?: readonly AudioAssetMeta[];
 }

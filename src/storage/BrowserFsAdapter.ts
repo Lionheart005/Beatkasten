@@ -1,3 +1,6 @@
+import type { ArrangementDoc } from '../core/arrangement/types';
+import type { AudioAssetMeta, AudioAssetPcm } from '../core/audio/types';
+import { decodeWav, encodeWavFloat32 } from '../core/audio/wavCodec';
 import type { DrawnCurveData } from '../core/math/curves';
 import type {
   BeatSnapshot,
@@ -286,6 +289,9 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
 
     const historyNodes =
       (await readJsonFile<HistoryNode[]>(matchedDir, 'history.json')) ?? [];
+    const arrangement =
+      (await readJsonFile<ArrangementDoc>(matchedDir, 'arrangement.json')) ?? undefined;
+    const assets = (await readJsonFile<AudioAssetMeta[]>(matchedDir, 'assets.json')) ?? undefined;
 
     const sections: SectionItem[] = [];
     const sectionsDir = await tryGetDir(matchedDir, 'sections');
@@ -319,6 +325,8 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
       activeHistoryNodeId: matchedManifest.activeHistoryNodeId,
       historyNodes,
       sections,
+      ...(arrangement ? { arrangement } : {}),
+      ...(assets ? { assets } : {}),
     };
   }
 
@@ -368,6 +376,13 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
       JSON.stringify(project.historyNodes, null, 2),
     );
 
+    if (project.arrangement) {
+      await writeTextFile(projectDir, 'arrangement.json', JSON.stringify(project.arrangement, null, 2));
+    }
+    if (project.assets) {
+      await writeTextFile(projectDir, 'assets.json', JSON.stringify(project.assets, null, 2));
+    }
+
     const sectionsDir = await ensureDir(projectDir, 'sections');
     const sectionFiles = new Set<string>();
     project.sections.forEach((section, idx) => {
@@ -410,6 +425,8 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
         // Carry exports over before removing the old folder.
         const oldExports = await tryGetDir(oldDir, 'exports');
         if (oldExports) await copyDirectory(oldExports, await ensureDir(projectDir, 'exports'));
+        const oldAudio = await tryGetDir(oldDir, 'audio');
+        if (oldAudio) await copyDirectory(oldAudio, await ensureDir(projectDir, 'audio'));
         try {
           await projectsDir.removeEntry(previousDirName, { recursive: true });
         } catch {
@@ -433,6 +450,47 @@ export class BrowserFsAdapter implements ProjectStorageAdapter {
       return false;
     }
     return false;
+  }
+
+  // --- Audio pool: <Projekt>/audio/<id>_<name>.wav (32-bit float) -----------
+
+  private async projectDirFor(projectName: string, projectId: string): Promise<FsDirectoryHandle> {
+    const projectsDir = await this.getProjectsDir();
+    const name = this.dirNameById.get(projectId) ?? sanitizeStorageName(projectName, projectId);
+    return ensureDir(projectsDir, name);
+  }
+
+  async saveAsset(projectName: string, projectId: string, meta: AudioAssetMeta, pcm: AudioAssetPcm): Promise<void> {
+    const dir = await ensureDir(await this.projectDirFor(projectName, projectId), 'audio');
+    const channels = pcm.right === pcm.left || meta.channels === 1 ? [pcm.left] : [pcm.left, pcm.right];
+    await writeBinaryFile(dir, meta.fileName.replace(/^audio\//, ''), encodeWavFloat32(channels, pcm.sampleRate));
+  }
+
+  async loadAsset(projectName: string, projectId: string, meta: AudioAssetMeta): Promise<AudioAssetPcm | null> {
+    try {
+      const projectsDir = await this.getProjectsDir();
+      const name = this.dirNameById.get(projectId) ?? sanitizeStorageName(projectName, projectId);
+      const projectDir = await tryGetDir(projectsDir, name);
+      const dir = projectDir ? await tryGetDir(projectDir, 'audio') : null;
+      if (!dir) return null;
+      const fh = await dir.getFileHandle(meta.fileName.replace(/^audio\//, ''), { create: false });
+      const file = await fh.getFile();
+      const decoded = decodeWav(new Uint8Array(await file.arrayBuffer()));
+      const left = decoded.channels[0] ?? new Float32Array(0);
+      const right = decoded.channels[1] ?? left;
+      return { left, right, sampleRate: decoded.sampleRate, length: Math.min(left.length, right.length) };
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteAsset(projectName: string, projectId: string, meta: AudioAssetMeta): Promise<void> {
+    try {
+      const dir = await tryGetDir(await this.projectDirFor(projectName, projectId), 'audio');
+      await dir?.removeEntry?.(meta.fileName.replace(/^audio\//, ''));
+    } catch {
+      // already gone
+    }
   }
 
   async saveExportedAudio(

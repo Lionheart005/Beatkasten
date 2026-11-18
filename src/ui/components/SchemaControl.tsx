@@ -19,7 +19,7 @@ interface SchemaControlProps {
   onOpenModTarget: (target: ActiveModTarget) => void;
 }
 
-function formatParamValue(schema: ParameterSchema, value: number): string {
+export function formatParamValue(schema: ParameterSchema, value: number): string {
   if (schema.options && schema.options.length > 0) {
     const matched = schema.options.find((opt) => Math.abs(opt.value - value) < 0.01);
     if (matched) return matched.label;
@@ -37,7 +37,7 @@ function formatParamValue(schema: ParameterSchema, value: number): string {
   return schema.unitLabel ? `${formatted} ${schema.unitLabel}` : formatted;
 }
 
-function toSliderPosition(schema: ParameterSchema, value: number): number {
+export function toSliderPosition(schema: ParameterSchema, value: number): number {
   const span = schema.max - schema.min;
   if (span <= 0) return 0;
   const norm = Math.max(0, Math.min(1, (value - schema.min) / span));
@@ -47,7 +47,7 @@ function toSliderPosition(schema: ParameterSchema, value: number): number {
   return norm;
 }
 
-function fromSliderPosition(schema: ParameterSchema, pos01: number): number {
+export function fromSliderPosition(schema: ParameterSchema, pos01: number): number {
   const clamped = Math.max(0, Math.min(1, pos01));
   if (schema.curve === 'exp' && schema.min > 0) {
     return schema.min * Math.pow(schema.max / schema.min, clamped);

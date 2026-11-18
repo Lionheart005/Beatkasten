@@ -6,6 +6,7 @@ import {
   getProgressionPreset,
   isChordPresetId,
   type ChordPresetId,
+  type ProgressionStepDef,
 } from './harmony';
 import {
   getHeptatonicIntervals,
@@ -14,6 +15,7 @@ import {
   normalizePitchClass,
 } from './scales';
 import { DEFAULT_VOICING_RANGE, solveVoiceLeading } from './voiceLeading';
+import { getClassicalTemplate, resolveClassicalTemplate } from './classicalChords';
 
 export type { ChordTransitionType };
 export type ProgressionMode = 'preset' | 'custom';
@@ -53,6 +55,12 @@ export interface ChordStepConfig {
   readonly bassAccidental?: -1 | 0 | 1;
   /** Rootless voicing: chord instruments leave out the chord root. */
   readonly omitRoot?: boolean;
+  /**
+   * Classical function template this chord came from ("neapolitan", "ger6" …).
+   * While set, degree / accidental / chord type follow the template and the
+   * current scale; editing those fields by hand removes it.
+   */
+  readonly templateId?: string;
 }
 
 export interface HarmonySettings {
@@ -88,6 +96,8 @@ export interface ResolvedChordStep {
   readonly bassPc: number;
   /** Chord without its root in the upper voicing. */
   readonly omitRoot: boolean;
+  /** Classical function symbol ("N⁶", "Dt⁺⁶" …) or null. */
+  readonly functionLabel: string | null;
 }
 
 export interface SolvedHarmonyStep extends ResolvedChordStep {
@@ -138,7 +148,7 @@ function autoNoteCount(globalChord: string): 3 | 4 | 5 | null {
   const preset = getChordPreset(globalChord);
   if (preset.id === 'sus2' || preset.id === 'sus4' || preset.id === 'power5') return null;
   if (preset.category === 'triad') return 3;
-  if (preset.category === 'seventh') return 4;
+  if (preset.category === 'seventh' || preset.category === 'classical') return 4;
   return 5;
 }
 
@@ -168,7 +178,15 @@ export function resolveStepIntervals(
   return getDiatonicChordIntervals(scaleId, degree, count);
 }
 
-function chordSymbolFor(intervals: readonly number[]): { id: string; symbol: string } {
+function chordSymbolFor(
+  intervals: readonly number[],
+  explicitType?: string,
+): { id: string; symbol: string } {
+  // Classical chords are enharmonic twins (ger6 = dom7): keep their own name.
+  if (explicitType && isChordPresetId(explicitType)) {
+    const explicit = CHORD_PRESETS[explicitType];
+    if (explicit.category === 'classical') return { id: explicit.id, symbol: explicit.symbol };
+  }
   const preset = findChordPresetByIntervals(intervals);
   if (preset) return { id: preset.id, symbol: preset.symbol };
   const hasMinor3 = intervals.includes(3);
@@ -268,10 +286,12 @@ export function resolveHarmonySteps(
     parallelScale: boolean,
     bassOffsetRaw: number | null = rootOffsetRaw,
     omitRoot = false,
+    explicitType?: string,
+    functionLabel: string | null = null,
   ) => {
     const rootOffset = wrapOffset(rootOffsetRaw);
     const rootPc = pcOf(keyPc + rootOffset);
-    const sym = chordSymbolFor(intervals);
+    const sym = chordSymbolFor(intervals, explicitType);
     const dur = clampDuration(durationBeats);
     const bassOffset = bassOffsetRaw === null ? null : wrapOffset(bassOffsetRaw);
     const bassPc = bassOffset === null ? -1 : pcOf(keyPc + bassOffset);
@@ -291,6 +311,7 @@ export function resolveHarmonySteps(
       bassOffset,
       bassPc,
       omitRoot: omitRoot && intervals.filter((i) => pcOf(i) !== 0).length >= 2,
+      functionLabel,
     });
     cursor += dur;
   };
@@ -298,7 +319,12 @@ export function resolveHarmonySteps(
   const custom = harmony.customSteps ?? [];
   if (harmony.progressionMode === 'custom' && custom.length > 0) {
     const scale = getHeptatonicIntervals(harmony.scaleId);
-    for (const step of custom.slice(0, MAX_CUSTOM_STEPS)) {
+    for (const rawStep of custom.slice(0, MAX_CUSTOM_STEPS)) {
+      const tpl = getClassicalTemplate(rawStep.templateId);
+      // Template chords follow the current scale (♭VI is natural in minor, flat in major).
+      const step: ChordStepConfig = tpl
+        ? { ...rawStep, ...pickTemplateFields(resolveClassicalTemplate(tpl.id, harmony.scaleId)), bass: rawStep.bass }
+        : rawStep;
       const degree = ((Math.round(step.degree) % 7) + 7) % 7;
       const acc = step.accidental === -1 || step.accidental === 1 ? step.accidental : 0;
       const intervals = resolveStepIntervals(
@@ -319,6 +345,8 @@ export function resolveHarmonySteps(
         false,
         resolveStepBassOffset(step, harmony.scaleId, rootOffsetRaw, intervals),
         step.omitRoot === true,
+        step.chordType,
+        tpl?.symbol ?? null,
       );
     }
     return out;
@@ -327,24 +355,31 @@ export function resolveHarmonySteps(
   const preset = getProgressionPreset(harmony.progressionId);
   if (preset.steps && preset.steps.length > 0) {
     const scale = getHeptatonicIntervals(harmony.scaleId);
-    for (const def of preset.steps) {
+    for (const rawDef of preset.steps) {
+      const def = resolvePresetStepDef(rawDef, harmony.scaleId);
       const degree = ((Math.round(def.degree) % 7) + 7) % 7;
       const acc = def.accidental ?? 0;
+      const chordType = def.chordType ?? 'auto';
       const intervals = resolveStepIntervals(
         harmony.scaleId,
         harmony.chordPreset,
         degree,
         acc,
-        def.chordType ?? 'auto',
+        chordType,
       );
+      const rootOffsetRaw = scale[degree]! + acc;
       pushStep(
-        scale[degree]! + acc,
+        rootOffsetRaw,
         intervals,
         (def.bars ?? 1) * bpb,
         romanNumeral(degree, acc, intervals),
         'cut',
         0,
         false,
+        resolveStepBassOffset({ bass: def.bass ?? 'root' }, harmony.scaleId, rootOffsetRaw, intervals),
+        false,
+        chordType,
+        getClassicalTemplate(def.template)?.symbol ?? null,
       );
     }
     return out;
@@ -359,6 +394,24 @@ export function resolveHarmonySteps(
     pushStep(off, chordIntervals, bpb, deg, 'cut', 0, true);
   }
   return out;
+}
+
+function pickTemplateFields(r: ReturnType<typeof resolveClassicalTemplate>) {
+  return { degree: r.degree, accidental: r.accidental, chordType: r.chordType };
+}
+
+/** Expands a preset step that uses a classical template into plain fields. */
+function resolvePresetStepDef(def: ProgressionStepDef, scaleId: string): ProgressionStepDef {
+  const tpl = getClassicalTemplate(def.template);
+  if (!tpl) return def;
+  const r = resolveClassicalTemplate(tpl.id, scaleId);
+  return {
+    ...def,
+    degree: r.degree,
+    accidental: r.accidental,
+    chordType: r.chordType as ProgressionStepDef['chordType'],
+    bass: def.bass ?? r.bass,
+  };
 }
 
 function degreeLabelForOffset(
@@ -512,15 +565,26 @@ export function presetToCustomSteps(
   const preset = getProgressionPreset(harmony.progressionId);
   const bpb = Number.isFinite(beatsPerBar) && beatsPerBar > 0 ? beatsPerBar : 4;
   if (preset.steps && preset.steps.length > 0) {
-    return preset.steps.map((def) => ({
-      id: makeId(),
-      degree: def.degree,
-      accidental: def.accidental ?? 0,
-      chordType: def.chordType ?? 'auto',
-      durationBeats: (def.bars ?? 1) * bpb,
-      transitionType: 'cut',
-      transitionBeats: 0,
-    }));
+    return preset.steps.map((raw) => {
+      const def = resolvePresetStepDef(raw, harmony.scaleId);
+      const step: ChordStepConfig = {
+        id: makeId(),
+        degree: def.degree,
+        accidental: def.accidental ?? 0,
+        chordType: def.chordType ?? 'auto',
+        durationBeats: (def.bars ?? 1) * bpb,
+        transitionType: 'cut',
+        transitionBeats: 0,
+      };
+      const tpl = getClassicalTemplate(raw.template);
+      if (!tpl && !def.bass) return step;
+      return {
+        ...step,
+        ...(def.bass && def.bass !== 'root' ? { bass: def.bass } : {}),
+        // Plain tonic / dominant helpers stay ordinary chords in the builder.
+        ...(tpl && tpl.inPalette ? { templateId: tpl.id } : {}),
+      };
+    });
   }
   // Legacy parallel progression: keep the global chord type fixed per step and
   // merge consecutive identical bars.

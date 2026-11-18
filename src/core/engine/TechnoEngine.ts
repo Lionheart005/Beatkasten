@@ -3,7 +3,7 @@ import { MasterBus } from '../dsp/masterBus';
 import { clamp, sanitizeSampleRate } from '../dsp/smoothing';
 import { ModulationRouter } from '../modulation/ModulationRouter';
 import { ModuleRegistry } from '../registry/ModuleRegistry';
-import { type HarmonyFrame, type MutableHarmonyFrame } from '../registry/types';
+import { type HarmonyFrame, type MutableHarmonyFrame, type SampleSource } from '../registry/types';
 import { type BeatSnapshot } from '../state/types';
 import { computeSnapshotCycleBeats } from './cycleMath';
 import { buildHarmonyTimeline, type HarmonyTimeline } from '../theory/progression';
@@ -21,6 +21,14 @@ export interface EngineTelemetry {
   combinedCycleBeats: number;
   currentBeat: number;
   currentBar: number;
+}
+
+export interface TechnoEngineOptions {
+  /**
+   * Timeline mode: no own MasterBus (glue/limiter run once on the song master);
+   * the section's master gain still acts as a pre-gain.
+   */
+  readonly dryOutput?: boolean;
 }
 
 interface ActiveLayerSlot {
@@ -64,12 +72,22 @@ export class TechnoEngine {
   private lastOutR = 0;
 
   private readonly telemetry: EngineTelemetry;
+  private readonly dryOutput: boolean;
+  /** Timeline keyframe overrides per layer index (NaN / -1 = none). */
+  private ovLevel: Float32Array = new Float32Array(0);
+  private ovPan: Float32Array = new Float32Array(0);
+  private ovEnabled: Int8Array = new Int8Array(0);
+  private hasOverrides = false;
+  private voicesSilenced = false;
+  private sampleLookup: ((assetId: string) => SampleSource | undefined) | null = null;
 
   constructor(
     sampleRate = 48000,
     registry: ModuleRegistry = defaultRegistry,
     maxBlockSize = DEFAULT_MAX_BLOCK_SIZE,
+    options: TechnoEngineOptions = {},
   ) {
+    this.dryOutput = options.dryOutput === true;
     this.sampleRate = sanitizeSampleRate(sampleRate);
     this.maxBlockSize = Math.max(64, maxBlockSize | 0);
     this.registry = registry;
@@ -128,6 +146,75 @@ export class TechnoEngine {
     this.telemetry.currentBar = this.clock.barPosition;
   }
 
+  /** Changes the tempo without jumping in musical time (beat position is kept). */
+  public setTempoBpm(bpm: number): void {
+    if (!Number.isFinite(bpm) || bpm === this.clock.tempoBpm) return;
+    const beat = this.clock.beatPosition;
+    this.clock.setTempoBpm(bpm);
+    if (this.clock.totalSamples > 0) this.clock.seekToBeat(beat);
+  }
+
+  /**
+   * Timeline: overrides a layer's level / pan / on-off for the next blocks
+   * (NaN or enabled = -1 → no override). Zero allocation.
+   */
+  public setLayerOverride(layerIndex: number, level: number, pan: number, enabled: -1 | 0 | 1): void {
+    if (layerIndex < 0 || layerIndex >= this.ovLevel.length) return;
+    this.ovLevel[layerIndex] = level;
+    this.ovPan[layerIndex] = pan;
+    this.ovEnabled[layerIndex] = enabled;
+    this.hasOverrides = true;
+  }
+
+  public clearLayerOverrides(): void {
+    if (!this.hasOverrides) return;
+    this.ovLevel.fill(NaN);
+    this.ovPan.fill(NaN);
+    this.ovEnabled.fill(-1);
+    this.hasOverrides = false;
+  }
+
+  public getHasLayerOverrides(): boolean {
+    return this.hasOverrides;
+  }
+
+  /** Index of a layer id in the current snapshot (-1 if unknown). */
+  public layerIndexOf(layerId: string): number {
+    const layers = this.snapshot?.layers;
+    if (!layers) return -1;
+    for (let i = 0; i < layers.length; i++) if (layers[i]!.id === layerId) return i;
+    return -1;
+  }
+
+  /** Timeline: value of an 'external' modulation slot (clip keyframes on any layer control). */
+  public setExternalValue(slot: number, value: number): void {
+    this.router.setExternalValue(slot, value);
+  }
+
+  /** Sample bank of the audio pool (sample instrument). Shared by beat mode, timeline and export. */
+  public setSampleBank(lookup: ((assetId: string) => SampleSource | undefined) | null): void {
+    this.sampleLookup = lookup;
+    this.refreshSamples();
+  }
+
+  /** Re-attaches samples after assets were added / removed. */
+  public refreshSamples(): void {
+    for (const engine of this.layerEngineCache.values()) {
+      engine.sampleLookup = this.sampleLookup;
+      engine.syncSamples();
+    }
+  }
+
+  /** Clip tail: voices fade out, effect cards keep ringing. */
+  public setVoicesSilenced(silenced: boolean): void {
+    this.voicesSilenced = silenced;
+  }
+
+  /** Current musical position of the clock in beats. */
+  public getBeatPosition(): number {
+    return this.clock.beatPosition;
+  }
+
   public getSampleRate(): number {
     return this.sampleRate;
   }
@@ -171,6 +258,8 @@ export class TechnoEngine {
    * Resets all DSP states, clock position, telemetry, and crossfade state.
    */
   public reset(): void {
+    this.clearLayerOverrides();
+    this.voicesSilenced = false;
     this.clock.reset();
     this.masterBus.reset();
     this.mixL.fill(0);
@@ -203,7 +292,8 @@ export class TechnoEngine {
 
     this.snapshot = snapshot;
 
-    this.clock.setTempoBpm(snapshot.tempoBpm);
+    // Tempo edits keep the musical position (no phase jump while playing).
+    this.setTempoBpm(snapshot.tempoBpm);
     this.clock.setTimeSignature(
       snapshot.timeSignature.numerator,
       snapshot.timeSignature.denominator,
@@ -221,6 +311,7 @@ export class TechnoEngine {
         engine = new LayerEngine(this.sampleRate, this.maxBlockSize);
         this.layerEngineCache.set(layer.id, engine);
       }
+      engine.sampleLookup = this.sampleLookup;
       engine.syncConfig(layer, this.registry);
       this.activeSlots.push({
         layerId: layer.id,
@@ -246,6 +337,13 @@ export class TechnoEngine {
         this.layerEngineCache.delete(cachedId);
         this.layerPulsesMap.delete(cachedId);
       }
+    }
+
+    if (this.ovLevel.length !== snapshot.layers.length) {
+      this.ovLevel = new Float32Array(snapshot.layers.length).fill(NaN);
+      this.ovPan = new Float32Array(snapshot.layers.length).fill(NaN);
+      this.ovEnabled = new Int8Array(snapshot.layers.length).fill(-1);
+      this.hasOverrides = false;
     }
 
     // Resize telemetry arrays only when layer count changes (never in processBlock)
@@ -420,6 +518,18 @@ export class TechnoEngine {
       } else {
         audible = layer.enabled && !layer.muted && (!anySolo || layer.solo);
       }
+      const eng = slot.engine;
+      if (this.hasOverrides) {
+        const en = this.ovEnabled[l]!;
+        if (en === 0) audible = false;
+        else if (en === 1 && layer.enabled) audible = !anySolo || layer.solo;
+        eng.mixOverrideLevel = this.ovLevel[l]!;
+        eng.mixOverridePan = this.ovPan[l]!;
+      } else if (eng.mixOverrideLevel === eng.mixOverrideLevel || eng.mixOverridePan === eng.mixOverridePan) {
+        eng.mixOverrideLevel = NaN;
+        eng.mixOverridePan = NaN;
+      }
+      eng.voicesSilenced = this.voicesSilenced;
 
       slot.engine.renderBlock(
         startBeat,
@@ -446,8 +556,17 @@ export class TechnoEngine {
     }
 
     const masterGain = clamp(snap.masterGain, 0, 2);
-    const masterGlue = clamp(snap.masterGlue, 0, 1);
-    this.masterBus.processBlock(mixL, mixR, count, masterGain, masterGlue);
+    if (this.dryOutput) {
+      if (masterGain !== 1) {
+        for (let i = 0; i < count; i++) {
+          mixL[i]! *= masterGain;
+          mixR[i]! *= masterGain;
+        }
+      }
+    } else {
+      const masterGlue = clamp(snap.masterGlue, 0, 1);
+      this.masterBus.processBlock(mixL, mixR, count, masterGain, masterGlue);
+    }
 
     if (this.crossfadeRemaining <= 0) {
       for (let i = 0; i < count; i++) {

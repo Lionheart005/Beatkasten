@@ -137,6 +137,13 @@ export class ModulationRouter {
    * Pre-bakes all drawn curves into 512-point Float32Array lookup tables and
    * prepares per-layer modulation caches ahead of audio rendering.
    */
+  /** Timeline keyframe values for 'external' routes (signal in parameter spans). */
+  private readonly externalValues = new Float64Array(64);
+
+  public setExternalValue(slot: number, value: number): void {
+    if (slot >= 0 && slot < this.externalValues.length) this.externalValues[slot] = value;
+  }
+
   public prepareSnapshot(snapshot: BeatSnapshot): void {
     this.prepareCurves(snapshot.curves);
 
@@ -571,6 +578,11 @@ export class ModulationRouter {
         const sourceId = cfg.sourceLayerId || ownLayerId;
         const pulse = clamp01(layerPulses.get(sourceId) ?? 0);
         return isMultiply ? pulse : pulse * 2 - 1;
+      }
+
+      case 'external': {
+        const v = this.externalValues[cfg.externalSlot ?? 0];
+        return v !== undefined && v === v ? v : isMultiply ? 1 : 0;
       }
 
       case 'drawn-curve': {

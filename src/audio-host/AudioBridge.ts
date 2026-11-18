@@ -1,13 +1,23 @@
 /// <reference types="vite/client" />
+import type { ArrangementDoc } from '../core/arrangement/types';
 import type { BeatSnapshot } from '../core/state/types';
 import {
   TECHNO_WORKLET_PROCESSOR_NAME,
+  type PlaybackMode,
   type WorkletInboundMessage,
   type WorkletOutboundMessage,
 } from './WorkletProcessor';
 import workletUrl from './WorkletProcessor.ts?worker&url';
 
 const SNAPSHOT_THROTTLE_MS = 16;
+const ARRANGEMENT_DEBOUNCE_MS = 30;
+
+export type { PlaybackMode };
+
+export interface SectionRef {
+  readonly id: string;
+  readonly snapshot: BeatSnapshot;
+}
 
 export interface LiveTelemetry {
   readonly isPlaying: boolean;
@@ -17,6 +27,12 @@ export interface LiveTelemetry {
   readonly layerPhases: readonly number[];
   readonly layerEnergies: readonly number[];
   readonly peakLevel: number;
+  readonly mode: PlaybackMode;
+  /** Timeline workspace only. */
+  readonly songBeat: number;
+  readonly trackPeaks: readonly number[];
+  readonly activePlayers: number;
+  readonly playerLimitHit: boolean;
 }
 
 interface PendingSectionCallback {
@@ -33,6 +49,11 @@ function createInitialTelemetry(): LiveTelemetry {
     layerPhases: [],
     layerEnergies: [],
     peakLevel: 0,
+    mode: 'beat',
+    songBeat: 0,
+    trackPeaks: [],
+    activePlayers: 0,
+    playerLimitHit: false,
   };
 }
 
@@ -55,6 +76,17 @@ export class AudioBridge {
   private throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private pendingSectionCallback: PendingSectionCallback | null = null;
+
+  private mode: PlaybackMode = 'beat';
+  private readonly playStartedListeners = new Set<(frame: number, songBeat: number) => void>();
+  private lastArrangement: ArrangementDoc | null = null;
+  private lastSections: readonly SectionRef[] = [];
+  private arrangementTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sentAssets = new Set<string>();
+  private readonly assetSource = new Map<
+    string,
+    { left: Float32Array; right: Float32Array; sampleRate: number }
+  >();
 
   private async ensureInitialized(): Promise<void> {
     if (this.node && this.ctx) {
@@ -136,8 +168,16 @@ export class AudioBridge {
         layerPhases: msg.layerPhases,
         layerEnergies: msg.layerEnergies,
         peakLevel: this.isPlaying ? msg.peakLevel : 0,
+        mode: msg.mode,
+        songBeat: msg.songBeat ?? this.telemetry.songBeat,
+        trackPeaks: msg.trackPeaks ? [...msg.trackPeaks] : [],
+        activePlayers: msg.activePlayers ?? 0,
+        playerLimitHit: msg.playerLimitHit === true,
       };
       this.notifyListeners();
+    } else if (msg.type === 'play-started') {
+      const cb = this.playStartedListeners;
+      for (const l of cb) l(msg.frame, msg.songBeat);
     } else if (msg.type === 'section-switched') {
       const pending = this.pendingSectionCallback;
       if (pending && pending.snapshotId === msg.snapshotId) {
@@ -160,6 +200,8 @@ export class AudioBridge {
     }
 
     this.clearThrottle();
+    this.forceBeatMode();
+    this.flushAssets();
     this.postToWorklet({ type: 'snapshot', snapshot: initialSnapshot });
     this.lastSnapshotSentAt = performance.now();
     this.postToWorklet({ type: 'play' });
@@ -197,6 +239,8 @@ export class AudioBridge {
 
     this.clearThrottle();
     this.pendingSectionCallback = null;
+    this.forceBeatMode();
+    this.flushAssets();
     this.postToWorklet({ type: 'reset' });
     this.postToWorklet({ type: 'snapshot', snapshot });
     this.lastSnapshotSentAt = performance.now();
@@ -252,6 +296,132 @@ export class AudioBridge {
       : null;
 
     this.postToWorklet({ type: 'queue-section', snapshot });
+  }
+
+  // --- Timeline workspace -------------------------------------------------
+
+  private forceBeatMode(): void {
+    if (this.mode === 'beat') return;
+    this.mode = 'beat';
+    this.postToWorklet({ type: 'set-mode', mode: 'beat' });
+  }
+
+  public getMode(): PlaybackMode {
+    return this.mode;
+  }
+
+  /** Switches the worklet between Beatkasten and Timeline (playback stops). */
+  public async setMode(mode: PlaybackMode): Promise<void> {
+    if (this.mode === mode) return;
+    if (this.isPlaying) await this.stop();
+    this.mode = mode;
+    this.postToWorklet({ type: 'set-mode', mode });
+    this.telemetry = { ...this.telemetry, mode };
+    this.notifyListeners();
+  }
+
+  /** Sends the arrangement (debounced while editing). */
+  public loadArrangement(doc: ArrangementDoc, immediate = false): void {
+    this.lastArrangement = doc;
+    if (!this.node) return;
+    if (this.arrangementTimer !== null) clearTimeout(this.arrangementTimer);
+    if (immediate) {
+      this.arrangementTimer = null;
+      this.postToWorklet({ type: 'arrangement', doc });
+      return;
+    }
+    this.arrangementTimer = setTimeout(() => {
+      this.arrangementTimer = null;
+      if (this.lastArrangement) this.postToWorklet({ type: 'arrangement', doc: this.lastArrangement });
+    }, ARRANGEMENT_DEBOUNCE_MS);
+  }
+
+  /** Current snapshots of all sections (clips reference them live). */
+  public setSections(sections: readonly SectionRef[]): void {
+    if (sections === this.lastSections) return;
+    this.lastSections = sections;
+    if (!this.node) return;
+    this.postToWorklet({
+      type: 'sections',
+      sections: sections.map((x) => ({ id: x.id, snapshot: x.snapshot })),
+    });
+  }
+
+  /** Registers PCM for audio clips / samples (sent to the worklet once). */
+  public setAsset(id: string, pcm: { left: Float32Array; right: Float32Array; sampleRate: number }): void {
+    this.assetSource.set(id, pcm);
+    this.sentAssets.delete(id);
+    this.flushAssets();
+  }
+
+  public removeAsset(id: string): void {
+    this.assetSource.delete(id);
+    if (this.sentAssets.delete(id)) this.postToWorklet({ type: 'asset-remove', id });
+  }
+
+  private flushAssets(): void {
+    if (!this.node) return;
+    for (const [id, pcm] of this.assetSource) {
+      if (this.sentAssets.has(id)) continue;
+      // Copies (the main thread keeps its PCM for waveforms / re-sends).
+      this.postToWorklet({
+        type: 'asset-add',
+        id,
+        left: pcm.left.slice(),
+        right: pcm.right.slice(),
+        sampleRate: pcm.sampleRate,
+      });
+      this.sentAssets.add(id);
+    }
+  }
+
+  /** Starts timeline playback at a song beat. */
+  public async playArrangement(fromBeat: number): Promise<void> {
+    await this.ensureInitialized();
+    if (this.ctx && this.ctx.state === 'suspended') await this.ctx.resume();
+    if (this.arrangementTimer !== null) {
+      clearTimeout(this.arrangementTimer);
+      this.arrangementTimer = null;
+    }
+    this.mode = 'arrangement';
+    this.postToWorklet({ type: 'set-mode', mode: 'arrangement' });
+    this.postToWorklet({
+      type: 'sections',
+      sections: this.lastSections.map((x) => ({ id: x.id, snapshot: x.snapshot })),
+    });
+    this.flushAssets();
+    if (this.lastArrangement) this.postToWorklet({ type: 'arrangement', doc: this.lastArrangement });
+    this.postToWorklet({ type: 'seek', beat: Math.max(0, fromBeat) });
+    this.postToWorklet({ type: 'play' });
+    this.isPlaying = true;
+    this.telemetry = { ...this.telemetry, isPlaying: true, mode: 'arrangement', songBeat: fromBeat };
+    this.notifyListeners();
+  }
+
+  /** Moves the playhead while playing (or prepares the next start). */
+  public seekSongBeat(beat: number): void {
+    this.postToWorklet({ type: 'seek', beat: Math.max(0, beat) });
+    this.telemetry = { ...this.telemetry, songBeat: beat, currentBeat: beat };
+    this.notifyListeners();
+  }
+
+  /** Called with the audio-clock frame where playback really started (recording sync). */
+  public onPlayStarted(listener: (frame: number, songBeat: number) => void): () => void {
+    this.playStartedListeners.add(listener);
+    return () => {
+      this.playStartedListeners.delete(listener);
+    };
+  }
+
+  /** Metronome clicks until a song beat (-1 = off, Infinity = always). */
+  public setMetronome(untilBeat: number, level = 0.5): void {
+    this.postToWorklet({ type: 'metronome', untilBeat: Number.isFinite(untilBeat) ? untilBeat : 1e9, level });
+  }
+
+  /** Microphone input needs the same AudioContext (recording, phase E). */
+  public async getContext(): Promise<AudioContext> {
+    await this.ensureInitialized();
+    return this.ctx!;
   }
 
   public onTelemetry(listener: (telemetry: LiveTelemetry) => void): () => void {

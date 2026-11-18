@@ -2,6 +2,7 @@ import { defaultRegistry } from '../defaultRegistry';
 import { clamp, sanitizeSampleRate } from '../dsp/smoothing';
 import { ModuleRegistry } from '../registry/ModuleRegistry';
 import { type BeatSnapshot } from '../state/types';
+import type { SampleSource } from '../registry/types';
 import { computeFullRepeatBars } from './cycleMath';
 import { TechnoEngine } from './TechnoEngine';
 
@@ -13,6 +14,8 @@ export interface OfflineRenderOptions {
   readonly preRollBars?: number;
   readonly isolateLayerId?: string;
   readonly registry?: ModuleRegistry;
+  /** Audio pool for sample-instrument layers. */
+  readonly sampleBank?: (assetId: string) => SampleSource | undefined;
 }
 
 export interface RenderedAudioBuffer {
@@ -77,6 +80,7 @@ export function renderOfflineLoop(
   const loopSamples = Math.max(1, Math.round(bars * samplesPerBar));
 
   const engine = new TechnoEngine(sampleRate, registry, OFFLINE_CHUNK_SIZE);
+  engine.setSampleBank(options.sampleBank ?? null);
   engine.reset();
   engine.applySnapshot(snapshot);
   engine.setIsolatedLayerId(options.isolateLayerId ?? null);
@@ -139,6 +143,7 @@ export interface SongChainRenderOptions {
   /** Extra Takte am Ende, in denen Hall & Echo ausklingen (Klang des letzten Abschnitts läuft leise aus). */
   readonly tailBars?: number;
   readonly registry?: ModuleRegistry;
+  readonly sampleBank?: (assetId: string) => SampleSource | undefined;
 }
 
 /**
@@ -164,6 +169,7 @@ export function renderSongChain(
   const total = partSamples.reduce((a, b) => a + b, 0) + tailSamples;
 
   const engine = new TechnoEngine(sampleRate, registry, OFFLINE_CHUNK_SIZE);
+  engine.setSampleBank(options.sampleBank ?? null);
   engine.reset();
   engine.applySnapshot(valid[0]!.snapshot);
   const chunkL = new Float32Array(OFFLINE_CHUNK_SIZE);

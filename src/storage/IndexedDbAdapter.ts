@@ -1,5 +1,6 @@
 import type { DrawnCurveData } from '../core/math/curves';
 import type { ProjectDocument } from '../core/state/types';
+import type { AudioAssetPcm } from '../core/audio/types';
 import {
   sanitizeStorageName,
   type ProjectStorageAdapter,
@@ -8,7 +9,8 @@ import {
 
 // Interner DB-Name bleibt absichtlich der alte, damit gespeicherte Projekte erhalten bleiben.
 const DB_NAME = 'techno-sound-generator-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
+const STORE_AUDIO = 'audio-assets';
 const STORE_PROJECTS = 'projects';
 const STORE_EXPORTS = 'exports';
 const STORE_CURVES = 'curves';
@@ -21,6 +23,16 @@ interface ExportRecord {
   readonly subFolder?: string;
   readonly bytes: Uint8Array;
   readonly savedAt: number;
+}
+
+interface AudioRecord {
+  readonly key: string;
+  readonly projectId: string;
+  readonly assetId: string;
+  readonly sampleRate: number;
+  readonly length: number;
+  readonly left: ArrayBuffer;
+  readonly right: ArrayBuffer | null;
 }
 
 interface CurveRecord {
@@ -51,6 +63,9 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
         db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(STORE_AUDIO)) {
+        db.createObjectStore(STORE_AUDIO, { keyPath: 'key' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -105,6 +120,41 @@ export class IndexedDbAdapter implements ProjectStorageAdapter {
     } catch {
       return null;
     }
+  }
+
+  // --- Audio pool (PCM per asset, never inside the project JSON) -----------
+
+  async saveAsset(projectId: string, assetId: string, pcm: AudioAssetPcm): Promise<void> {
+    const record: AudioRecord = {
+      key: `${projectId}:${assetId}`,
+      projectId,
+      assetId,
+      sampleRate: pcm.sampleRate,
+      length: pcm.length,
+      left: pcm.left.slice().buffer as ArrayBuffer,
+      right: pcm.right === pcm.left ? null : (pcm.right.slice().buffer as ArrayBuffer),
+    };
+    await runTransaction(STORE_AUDIO, 'readwrite', (store) => store.put(record));
+  }
+
+  async loadAsset(projectId: string, assetId: string): Promise<AudioAssetPcm | null> {
+    try {
+      const r = await runTransaction<AudioRecord | undefined>(
+        STORE_AUDIO,
+        'readonly',
+        (store) => store.get(`${projectId}:${assetId}`) as IDBRequest<AudioRecord | undefined>,
+      );
+      if (!r) return null;
+      const left = new Float32Array(r.left);
+      const right = r.right ? new Float32Array(r.right) : left;
+      return { left, right, sampleRate: r.sampleRate, length: Math.min(left.length, right.length) };
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteAsset(projectId: string, assetId: string): Promise<void> {
+    await runTransaction(STORE_AUDIO, 'readwrite', (store) => store.delete(`${projectId}:${assetId}`));
   }
 
   async deleteSetting(key: string): Promise<void> {

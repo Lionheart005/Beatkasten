@@ -27,6 +27,9 @@ import {
   type SectionItem,
 } from '../../core/state';
 import { buildDefaultParams } from '../../core/registry/types';
+import { repairProjectArrangement } from '../../core/state/arrangementMigration';
+import type { ArrangementDoc } from '../../core/arrangement/types';
+import type { AudioAssetMeta } from '../../core/audio/types';
 import type { CycleUnit } from '../../core/theory/cycles';
 import {
   BrowserFsAdapter,
@@ -304,7 +307,7 @@ export function useStudioStore() {
         setSavedProjects(list);
         if (list.length > 0) {
           const loadedRaw = await idbAdapterSingleton.loadProject(list[0]!.id);
-          const loaded = loadedRaw ? repairProjectIds(migrateProjectTime(loadedRaw)) : null;
+          const loaded = loadedRaw ? repairProjectArrangement(repairProjectIds(migrateProjectTime(loadedRaw))) : null;
           if (!cancelled && loaded) {
             setProject(loaded);
             setActiveSectionId(null);
@@ -1480,7 +1483,7 @@ export function useStudioStore() {
           ? ((await fsAdapterSingleton.loadProject(projectIdOrName)) ??
             (await idbAdapterSingleton.loadProject(projectIdOrName)))
           : await idbAdapterSingleton.loadProject(projectIdOrName);
-        const loaded = loadedRaw ? repairProjectIds(migrateProjectTime(loadedRaw)) : null;
+        const loaded = loadedRaw ? repairProjectArrangement(repairProjectIds(migrateProjectTime(loadedRaw))) : null;
         if (!loaded) {
           showNotice('Projekt konnte nicht geladen werden.');
           return;
@@ -1523,7 +1526,61 @@ export function useStudioStore() {
     [project.activeHistoryNodeId, project.historyNodes],
   );
 
+  // --- Timeline workspace -------------------------------------------------
+  const arrangementPersistTimerRef = useRef<number | null>(null);
+  const schedulePersistLatest = useCallback(() => {
+    if (arrangementPersistTimerRef.current !== null) {
+      window.clearTimeout(arrangementPersistTimerRef.current);
+    }
+    arrangementPersistTimerRef.current = window.setTimeout(() => {
+      arrangementPersistTimerRef.current = null;
+      void persistProject(projectRef.current);
+    }, 500);
+  }, [persistProject]);
+
+  /** Replaces the timeline document (undo lives in the arrangement store). */
+  const setArrangement = useCallback(
+    (next: ArrangementDoc) => {
+      setProject((prev) =>
+        prev.arrangement === next ? prev : { ...prev, updatedAt: Date.now(), arrangement: next },
+      );
+      schedulePersistLatest();
+    },
+    [schedulePersistLatest],
+  );
+
+  const setAssets = useCallback(
+    (updater: (prev: readonly AudioAssetMeta[]) => readonly AudioAssetMeta[]) => {
+      setProject((prev) => ({ ...prev, updatedAt: Date.now(), assets: updater(prev.assets ?? []) }));
+      schedulePersistLatest();
+    },
+    [schedulePersistLatest],
+  );
+
+  /** New section from a snapshot ("Als Variante abkoppeln"); returns its id. */
+  const addSectionFromSnapshot = useCallback(
+    (snapshot: BeatSnapshot, name: string, exportBars = 8): string => {
+      const idx = projectRef.current.sections.length;
+      const sec: SectionItem = {
+        id: nextUiId('sec'),
+        name,
+        notes: '',
+        color: SECTION_COLORS[idx % SECTION_COLORS.length] ?? '#38bdf8',
+        exportBars,
+        snapshot: { ...snapshot, id: nextUiId('snap') },
+      };
+      setProject((prev) => ({ ...prev, updatedAt: Date.now(), sections: [...prev.sections, sec] }));
+      schedulePersistLatest();
+      return sec.id;
+    },
+    [schedulePersistLatest],
+  );
+
   return {
+    setArrangement,
+    setAssets,
+    addSectionFromSnapshot,
+    audioBridge: audioBridgeSingleton,
     project,
     snapshot: project.activeSnapshot,
     selectedLayer,

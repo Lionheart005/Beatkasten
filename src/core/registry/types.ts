@@ -192,7 +192,26 @@ export interface VoiceRenderContext {
   readonly prevPulseTrigger: number;
 }
 
+/** PCM handed to sample-based voices (sample instrument). */
+export interface SampleSource {
+  readonly left: Float32Array;
+  readonly right: Float32Array;
+  readonly sampleRate: number;
+  readonly length: number;
+}
+
+/** Region / root / loop / slices of a sample layer (seconds in the asset). */
+export interface SampleRegion {
+  readonly rootMidi: number;
+  readonly startSec: number;
+  readonly endSec: number;
+  readonly loop?: { readonly startSec: number; readonly endSec: number; readonly crossfadeSec: number };
+  readonly slices?: readonly number[];
+}
+
 export interface VoiceInstance {
+  /** Sample voices only: new PCM / region (null = silent). Not called per block. */
+  attachSample?(source: SampleSource | null, region: SampleRegion | null): void;
   reset(): void;
   process(
     outL: Float32Array,

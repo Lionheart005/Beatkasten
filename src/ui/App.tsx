@@ -10,12 +10,51 @@ import { LayerStackPanel } from './panels/LayerStackPanel';
 import { SectionsAndHistoryPanel } from './panels/SectionsAndHistoryPanel';
 import { TransportBar } from './panels/TransportBar';
 import { useStudioStore } from './store/useStudioStore';
+import type { Workspace } from './components/WorkspaceSwitch';
+import { TimelineWorkspace } from './timeline/TimelineWorkspace';
+import { useArrangementStore } from './timeline/useArrangementStore';
+import { TransitionPalette } from './timeline/TransitionPalette';
+import { useAudioPool } from './audio/useAudioPool';
+import { useTimelineAudio } from './timeline/useTimelineAudio';
+import { RecordControls } from './timeline/RecordControls';
+import { SampleEditor, SampleSection } from './components/SampleEditor';
+import { referencedSectionIds } from '../core/arrangement/edit';
 
 export function App() {
   const store = useStudioStore();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isHarmonyBuilderOpen, setIsHarmonyBuilderOpen] = useState(false);
+  const [workspace, setWorkspace] = useState<Workspace>(() =>
+    loadLayoutPref('workspace', { w: 'beat' }).w === 'timeline' ? 'timeline' : 'beat',
+  );
+  const arr = useArrangementStore(store, workspace === 'timeline');
+  const pool = useAudioPool(store);
+  const [sampleEditorLayerId, setSampleEditorLayerId] = useState<string | null>(null);
+  const sampleEditorLayer = sampleEditorLayerId
+    ? store.snapshot.layers.find((l) => l.id === sampleEditorLayerId) ?? null
+    : null;
+  const tlAudio = useTimelineAudio(store, arr, pool);
+
+  const switchWorkspace = useCallback(
+    async (w: Workspace) => {
+      if (w === workspace) return;
+      // Only one workspace plays at a time: switching stops playback.
+      await store.audioBridge.setMode(w === 'timeline' ? 'arrangement' : 'beat');
+      setWorkspace(w);
+      saveLayoutPref('workspace', { w });
+    },
+    [store.audioBridge, workspace],
+  );
+
+  const openSectionInBeatkasten = useCallback(
+    (sectionId: string) => {
+      const sec = store.project.sections.find((s) => s.id === sectionId);
+      if (!sec) return;
+      void switchWorkspace('beat').then(() => store.triggerSectionSwitch(sec));
+    },
+    [store, switchWorkspace],
+  );
 
   // Fenstergrößen (per Maus ziehbar, im Browser gespeichert)
   const DEFAULT_LAYOUT = { left: 290, right: 320, visual: 0 };
@@ -63,21 +102,33 @@ export function App() {
       const modKey = e.ctrlKey || e.metaKey;
       if (!modKey) return;
 
+      // Undo always acts in the active workspace.
       if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
-        store.undo();
+        if (workspace === 'timeline') arr.undo();
+        else store.undo();
       } else if (
         e.key.toLowerCase() === 'y' ||
         (e.key.toLowerCase() === 'z' && e.shiftKey)
       ) {
         e.preventDefault();
-        store.redo();
+        if (workspace === 'timeline') arr.redo();
+        else store.redo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store]);
+  }, [store, arr, workspace]);
+
+  const deleteSectionGuarded = useCallback(
+    (sectionId: string) => {
+      const used = store.project.arrangement && referencedSectionIds(store.project.arrangement).has(sectionId);
+      if (used && !window.confirm('Dieser Abschnitt wird in der Timeline benutzt. Trotzdem löschen? (Die Clips bleiben stumm stehen.)')) return;
+      store.deleteSection(sectionId);
+    },
+    [store],
+  );
 
   const selectedLayerIndex = store.snapshot.layers.findIndex(
     (l) => l.id === store.selectedLayerId,
@@ -86,6 +137,8 @@ export function App() {
   return (
     <div className="studio-shell">
       <TransportBar
+        workspace={workspace}
+        onSwitchWorkspace={(w) => void switchWorkspace(w)}
         projectName={store.project.name}
         snapshot={store.snapshot}
         isPlaying={store.isPlaying}
@@ -107,6 +160,25 @@ export function App() {
         onOpenExportModal={() => setIsExportOpen(true)}
       />
 
+      {workspace === 'timeline' && (
+        <TimelineWorkspace
+          studio={store}
+          arr={arr}
+          onOpenInBeatkasten={openSectionInBeatkasten}
+          transitionPalette={<TransitionPalette arr={arr} studio={store} />}
+          audioPool={tlAudio.audioPoolNode}
+          recordControls={<RecordControls studio={store} arr={arr} pool={pool} />}
+          renderWaveform={tlAudio.renderWaveform}
+          onDropAsset={tlAudio.onDropAsset}
+          onDropFiles={(files, trackId, beat) => void tlAudio.onDropFiles(files, trackId, beat)}
+          clipActions={tlAudio.clipActions}
+          selectionActions={tlAudio.selectionActions}
+          onFreezeTrack={(id) => void tlAudio.freezeTrack(id)}
+        />
+      )}
+
+      {workspace === 'beat' && (
+      <>
       {/* Visual Center: Phase Radar + Layer Wave Preview */}
       <section
         className="visual-center"
@@ -221,6 +293,9 @@ export function App() {
           onDeleteModulationRoute={store.deleteModulationRoute}
           onUpsertCurveLive={store.upsertCurveLive}
           onCreateCurve={store.createCurve}
+          renderSampleSection={(layer) => (
+            <SampleSection layer={layer} pool={pool} onOpen={() => setSampleEditorLayerId(layer.id)} />
+          )}
         />
 
         <Splitter
@@ -254,7 +329,7 @@ export function App() {
           onDuplicateSection={store.duplicateSection}
           onOverwriteSection={store.overwriteSectionWithCurrent}
           onUpdateSectionMeta={store.updateSectionMeta}
-          onDeleteSection={store.deleteSection}
+          onDeleteSection={deleteSectionGuarded}
           onUndo={store.undo}
           onRedo={store.redo}
           onJumpHistory={store.jumpHistory}
@@ -263,6 +338,8 @@ export function App() {
           onClearCompare={store.clearCompare}
         />
       </main>
+      </>
+      )}
 
       <ExportModal
         isOpen={isExportOpen}
@@ -277,6 +354,9 @@ export function App() {
         }}
         onClose={() => setIsExportOpen(false)}
         onNotice={store.showNotice}
+        arrangement={store.project.arrangement ?? null}
+        getArrangementAssets={tlAudio.getExportAssets}
+        preferTimeline={workspace === 'timeline'}
       />
 
       <ProjectModal
@@ -297,6 +377,19 @@ export function App() {
         onPickOtherFolder={store.pickOtherProjectFolder}
         onClose={() => setIsProjectModalOpen(false)}
       />
+
+      {sampleEditorLayer && (
+        <SampleEditor
+          layer={sampleEditorLayer}
+          pool={pool}
+          studio={store}
+          onApply={(cfg) => {
+            store.commitLayerImmediate(sampleEditorLayer.id, (l) => ({ ...l, sample: cfg }), 'Sample gewählt');
+            setSampleEditorLayerId(null);
+          }}
+          onClose={() => setSampleEditorLayerId(null)}
+        />
+      )}
 
       {store.statusNotice && (
         <div className="status-toast">{store.statusNotice}</div>

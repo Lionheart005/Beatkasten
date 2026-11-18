@@ -30,9 +30,13 @@ export type ChordPresetId =
   | 'maj13'
   | 'minor13'
   | 'aug9'
-  | 'augMaj9';
+  | 'augMaj9'
+  // Klassisch & Funktional (übermäßige Sextakkorde)
+  | 'it6'
+  | 'fr6'
+  | 'ger6';
 
-export type ChordCategory = 'triad' | 'seventh' | 'extended';
+export type ChordCategory = 'triad' | 'seventh' | 'extended' | 'classical';
 
 export interface ChordPreset {
   readonly id: ChordPresetId;
@@ -85,12 +89,19 @@ export const CHORD_PRESETS: Readonly<Record<ChordPresetId, ChordPreset>> = {
   minor13: chord('minor13', 'Moll 13', [0, 3, 7, 10, 14, 17, 21], 'extended', 'm13'),
   aug9: chord('aug9', 'Übermäßig 9 (9♯5)', [0, 4, 8, 10, 14], 'extended', '9♯5'),
   augMaj9: chord('augMaj9', 'Übermäßig Maj9 (maj9♯5)', [0, 4, 8, 11, 14], 'extended', 'maj9♯5'),
+
+  // Augmented sixth chords, built on the chord root (usually bVI): the minor
+  // seventh (10) is spelled as the augmented sixth (#4 of the key).
+  it6: chord('it6', 'Italienischer Sextakkord (It⁺⁶)', [0, 4, 10], 'classical', ' It⁺⁶'),
+  fr6: chord('fr6', 'Französischer Sextakkord (Fr⁺⁶)', [0, 4, 6, 10], 'classical', ' Fr⁺⁶'),
+  ger6: chord('ger6', 'Deutscher Sextakkord (Dt⁺⁶)', [0, 4, 7, 10], 'classical', ' Dt⁺⁶'),
 };
 
 export const CHORD_CATEGORY_LABELS: Readonly<Record<ChordCategory, string>> = {
   triad: 'Dreiklänge',
   seventh: 'Vierklänge & Farben',
   extended: 'Jazz 9 · 11 · 13',
+  classical: 'Klassisch & Funktional',
 };
 
 export function isChordPresetId(id: string): id is ChordPresetId {
@@ -106,6 +117,8 @@ export function getChordPreset(chordPreset: string): ChordPreset {
 export function findChordPresetByIntervals(intervals: readonly number[]): ChordPreset | null {
   const key = [...intervals].sort((a, b) => a - b).join(',');
   for (const preset of Object.values(CHORD_PRESETS)) {
+    // Enharmonic twins (ger6 = dom7) are only named when chosen explicitly.
+    if (preset.category === 'classical') continue;
     if ([...preset.intervals].sort((a, b) => a - b).join(',') === key) return preset;
   }
   return null;
@@ -132,7 +145,16 @@ export type ProgressionId =
   | 'cad_lydian_float'
   | 'cad_mixolydian'
   | 'cad_pachelbel'
-  | 'cad_deep_minor';
+  | 'cad_deep_minor'
+  // Klassische Kadenzen (Funktions-Vorlagen)
+  | 'cad_neapolitan'
+  | 'cad_sixte_ajoutee'
+  | 'cad_german_sixth'
+  | 'cad_italian_sixth'
+  | 'cad_french_sixth'
+  | 'cad_double_dominant'
+  | 'cad_picardy'
+  | 'cad_minor_subdominant';
 
 export interface ProgressionStepDef {
   /** Scale degree 0..6 (I..VII). */
@@ -141,12 +163,19 @@ export interface ProgressionStepDef {
   /** 'auto' = diatonic chord in the colour of the global chord selection. */
   readonly chordType?: ChordPresetId | 'auto';
   readonly bars?: number;
+  /**
+   * Classical function template (see classicalChords.ts). When set, degree,
+   * accidental, chord type and bass are derived from the template and the scale.
+   */
+  readonly template?: string;
+  /** Bass of the chord (default 'root'). */
+  readonly bass?: 'root' | 'third' | 'fifth' | 'seventh' | 'none';
 }
 
 export interface ProgressionPreset {
   readonly id: ProgressionId;
   readonly label: string;
-  readonly group: 'techno' | 'cadence';
+  readonly group: 'techno' | 'cadence' | 'classical';
   /** Legacy: semitone offsets per bar relative to the base root note. */
   readonly semitoneOffsets?: readonly number[];
   /** Scale-degree based steps. */
@@ -159,6 +188,9 @@ const s = (
   chordType: ChordPresetId | 'auto' = 'auto',
   accidental: -1 | 0 | 1 = 0,
 ): ProgressionStepDef => ({ degree, bars, chordType, accidental });
+
+/** Step from a classical function template ("N6", "ger6", ...). */
+const t = (template: string, bars = 1): ProgressionStepDef => ({ degree: 0, bars, template });
 
 export const PROGRESSION_PRESETS: Readonly<Record<ProgressionId, ProgressionPreset>> = {
   static: {
@@ -251,6 +283,55 @@ export const PROGRESSION_PRESETS: Readonly<Record<ProgressionId, ProgressionPres
     label: 'Deep Moll (i – iv – VI – v)',
     group: 'cadence',
     steps: [s(0, 2), s(3), s(5), s(4)],
+  },
+
+  cad_neapolitan: {
+    id: 'cad_neapolitan',
+    label: 'Neapolitanische Kadenz (i – N⁶ – V⁷ – i)',
+    group: 'classical',
+    steps: [t('tonic'), t('neapolitan'), t('dominant7'), t('tonic')],
+  },
+  cad_sixte_ajoutee: {
+    id: 'cad_sixte_ajoutee',
+    label: 'Sixte ajoutée (I – S⁶ – D⁷ – T)',
+    group: 'classical',
+    steps: [t('tonic'), t('sixte-ajoutee'), t('dominant7'), t('tonic')],
+  },
+  cad_german_sixth: {
+    id: 'cad_german_sixth',
+    label: 'Deutsche Sexte (i – Dt⁺⁶ – V – i)',
+    group: 'classical',
+    steps: [t('tonic'), t('ger6'), t('dominant'), t('tonic')],
+  },
+  cad_italian_sixth: {
+    id: 'cad_italian_sixth',
+    label: 'Italienische Sexte (i – It⁺⁶ – V – i)',
+    group: 'classical',
+    steps: [t('tonic'), t('it6'), t('dominant'), t('tonic')],
+  },
+  cad_french_sixth: {
+    id: 'cad_french_sixth',
+    label: 'Französische Sexte (i – Fr⁺⁶ – V – i)',
+    group: 'classical',
+    steps: [t('tonic'), t('fr6'), t('dominant'), t('tonic')],
+  },
+  cad_double_dominant: {
+    id: 'cad_double_dominant',
+    label: 'Doppeldominante (I – DD⁷ – V⁷ – I)',
+    group: 'classical',
+    steps: [t('tonic'), t('double-dominant'), t('dominant7'), t('tonic')],
+  },
+  cad_picardy: {
+    id: 'cad_picardy',
+    label: 'Picardie-Schluss (i – iv – V⁷ – I)',
+    group: 'classical',
+    steps: [t('tonic-minor'), t('subdominant-minor'), t('dominant7'), t('picardy')],
+  },
+  cad_minor_subdominant: {
+    id: 'cad_minor_subdominant',
+    label: 'Romantische Moll-Subdominante (I – iv – I)',
+    group: 'classical',
+    steps: [t('tonic', 2), t('subdominant-minor'), t('tonic')],
   },
 };
 

@@ -82,6 +82,16 @@
 - [x] `time-step-grid` „Rhythmus-Raster“ (1–64 Steps, Klick-Raster mit Schlag/Akzent/Halten, Spitze, Ton-Länge, Ausklang, Verzögerung, Verschiebung, Euklid-Zusatzschläge) ersetzt Puls-Interferenz/Gravitation/Euklid in der UI; Migration alter Projekte & Presets (`state/timeMigration.ts`).
 - [x] Gate-Signal + „Halten (Sustain)“ für alle Anschlag-Instrumente; fester Einzelton pro Layer (`LayerConfig.pitch`); Bass-Spalte & grundtonlose Akkorde im Baukasten; Klang-Regler in 7 Gruppen mit einheitlichen Bezeichnungen (`voices/paramLayout.ts`). **76/76 Tests**, Build ✓.
 
+### Welle 12 (GEPLANT, noch nicht begonnen): Timeline-Workspace, Audio-Spuren & Aufnahme, Sample-Instrument, klassische Akkorde ([`12-timeline-aufnahme-sampler-akkorde.md`](./12-timeline-aufnahme-sampler-akkorde.md))
+- Nutzer-Entscheidungen (18.11.2026): **ein Song-Tempo** für die Timeline (Abschnitte passen sich an) und Tempo-/Taktart-Wechsel als Marker. Reihenfolge **A Akkorde → B Timeline-Kern → C Keyframes/Übergänge → D Audio-Spuren → E Aufnahme → F Sample-Instrument**.
+- [ ] Phase A: Neapolitaner, Sixte ajoutée, übermäßige Sextakkorde (it./fr./dt.), Doppel- und Zwischendominanten u. a. als Funktions-Vorlagen sowie klassische Kadenzen
+- [ ] Phase B: zweiter Workspace mit Abschnitts-Clips (Live-Verweis), Layer-Overrides pro Clip, nahtlosem Zerteilen, Übereinanderlegen, Snapping, Fades, Export
+- [ ] Phase C: Spur-/Master-FX mit Keyframe-Automation, Layer-Lanes, Übergangs-Vorlagen
+- [ ] Phase D: Audio-Pool, Import, Audio-Clips schneiden und bearbeiten, Einfrieren
+- [ ] Phase E: Aufnahme (Vorzähler, Metronom, Latenz-Ausgleich)
+- [ ] Phase F: Sample-Instrument `sample-player` in beiden Workspaces und Sample-Editor
+- Hinweis: „Unterschiedliche Kadenzen pro Abschnitt“ geht bereits, weil jeder Abschnitt seine eigene `harmony` im Snapshot speichert.
+
 ## 4. Gefundene Fehler, Probleme & Wichtige Erkenntnisse
 - **Ursache für unregelmäßigen `Four-on-the-Floor` (gelöst in WP-10/WP-11)**: `interferenceEnergy` verwendete vorher `Math.sin` (startete auf der Zählzeit bei `0.5` unipolar statt auf dem Gipfel `1.0`), `time-pulse-interference` feuerte teils doppelt (`crossedThreshold` + `steppedInEnergy`) und `Four-on-the-Floor` mischte `freqB = 1` (`0.2`) + `threshold = 0.52` + `gravity = 0.9` ein. Durch Cosinus-Ausrichtung, analytische Wellenkamm-Erkennung (`pulseSlope`), `0`-Defaults und sauberes Preset läuft `Four-on-the-Floor` jetzt exakt auf Beat 1, 2, 3, 4.
 - **Umgebungs-Check (15.11.2026)**: `node` v26.9.0 & `npm` 12.2.0 installiert; `git` mit Initial-Commit (`048322d`) eingerichtet.
@@ -92,6 +102,7 @@
   - Bei 48 kHz führten 8-Sample-Control-Subblocks + unindexierte Modulations-Scans zu ~7,5 s Renderzeit pro 10 s Stereo-Audio. Durch `CONTROL_SUBBLOCK_SIZE = 32`, `hasTargetRoutes`-Vorabindizierung in `ModulationRouter`, zero-alloc `evaluateTimeInto` und Fast-Paths für eingeschwungene `OnePoleSmoother` sank die Laufzeit im Supervisor-Testlauf auf `934 ms` (< 1000 ms Budget, >10x Realtime).
 
 ## 5. Ausstehende Arbeitsschritte & Nächste Schritte
+0. **Nächstes großes Vorhaben: Welle 12** ([`12-timeline-aufnahme-sampler-akkorde.md`](./12-timeline-aufnahme-sampler-akkorde.md)). Start mit Phase A (klassische Akkorde), dann Phase B (Timeline-Kern). Die Checkliste in Abschnitt 6 des Plans ist führend.
 1. Hörtest durch den Benutzer im Browser (`npm run dev`): Glocken, Akkord-Baukasten (Glide/Blende), Speichern mit echtem Ordner, langer Export.
 2. Meilenstein-Commit (noch nicht erfolgt – nur auf Wunsch).
 3. **Vorgeschlagene nächste Features gegen Eintönigkeit (Entscheidung durch Nutzer offen):**
@@ -100,3 +111,13 @@
    - **Seed-Zufall mit Periode** („Würfel“ der sich nach N Takten wiederholt): Ghost-Notes, Note-Auslassung, Velocity.
    - **Song-Kette**: Sections mit Taktanzahl hintereinander abspielen und als ein langes WAV exportieren.
    - **Akkord-Melodie-Kopplung**: Glocke trifft auf betonten Zählzeiten Akkordtöne, dazwischen Durchgangstöne.
+
+
+### Welle 12 (Umgesetzt, Claude Opus 5.5 direkt): Timeline, Audio-Spuren, Aufnahme, Sample-Instrument, klassische Akkorde ([`12-timeline-aufnahme-sampler-akkorde.md`](./12-timeline-aufnahme-sampler-akkorde.md))
+- [x] Phase A: übermäßige Sextakkorde, Funktions-Vorlagen (N⁶, S⁶, DD⁷, Zwischendominanten, Picardie, vii°⁷, Medianten), klassische Kadenzen, Chips im Baukasten.
+- [x] Phase B: Workspace „Timeline“ (`src/core/arrangement/`, `src/ui/timeline/`), ArrangementEngine (nahtlos teilbar, bit-identisch), Tempo-/Taktart-/Song-Marker, Snapping, Export „Timeline“ inkl. Stems.
+- [x] Phase C: Keyframes (Master/Spur/FX/Clip-Layer/beliebige Layer-Regler), Übergangs-Vorlagen, Clip-Ausklang, Karten Bremse/Stottern/Gleichmäßig.
+- [x] Phase D: Audio-Pool, Import, Audio-Clips (Trim/Fade/Gain/Rückwärts/Normalisieren), Bounce, Einfrieren/Auftauen.
+- [x] Phase E: Aufnahme mit Vorzähler, Metronom, Takes, Latenz-Ausgleich + Messung, Mithören.
+- [x] Phase F: Sample-Instrument (4 Spielweisen) + Sample-Editor in beiden Workspaces.
+- Tests: **123/124** (einzige Ausnahme: grenzwertiges Performance-Budget, s. Plan 12 §8), `tsc` ✓, `vite build` ✓. **Offen:** Browser-Check und Hörtest durch den Nutzer.

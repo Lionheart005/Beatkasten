@@ -21,8 +21,11 @@ import { NOTE_NAMES, SCALE_DEFINITIONS } from '../../core/theory/scales';
 import type { BeatSnapshot } from '../../core/state/types';
 import { formatSaveTime } from '../components/ProjectModal';
 import type { SaveState } from '../store/useStudioStore';
+import { WorkspaceSwitch, type Workspace } from '../components/WorkspaceSwitch';
 
 interface TransportBarProps {
+  workspace: Workspace;
+  onSwitchWorkspace: (w: Workspace) => void;
   projectName: string;
   snapshot: BeatSnapshot;
   isPlaying: boolean;
@@ -66,6 +69,8 @@ const TIME_SIGNATURES = [
 ];
 
 export function TransportBar({
+  workspace,
+  onSwitchWorkspace,
   projectName,
   snapshot,
   isPlaying,
@@ -116,6 +121,10 @@ export function TransportBar({
           </div>
         </div>
 
+        <WorkspaceSwitch value={workspace} onChange={onSwitchWorkspace} />
+
+        {workspace === 'beat' && (
+        <>
         <button
           type="button"
           className={`btn-play${isPlaying ? ' is-playing' : ''}`}
@@ -185,9 +194,12 @@ export function TransportBar({
             ))}
           </select>
         </div>
+        </>
+        )}
       </div>
 
       {/* Global Harmony & Master */}
+      {workspace === 'beat' && (
       <div className="transport-group">
         <div className="field-chip" title="Grundton der Tonart">
           <label>Ton</label>
@@ -317,6 +329,15 @@ export function TransportBar({
                   </option>
                 ))}
             </optgroup>
+            <optgroup label="Klassische Kadenzen">
+              {Object.values(PROGRESSION_PRESETS)
+                .filter((pr) => pr.group === 'classical')
+                .map((pr) => (
+                  <option key={pr.id} value={pr.id}>
+                    {pr.label}
+                  </option>
+                ))}
+            </optgroup>
             {(snapshot.harmony.customSteps?.length ?? 0) > 0 && (
               <optgroup label="Baukasten">
                 <option value="__custom__">
@@ -382,9 +403,11 @@ export function TransportBar({
           </div>
         </div>
       </div>
+      )}
 
       {/* Starter Presets + Storage + Export */}
       <div className="transport-group">
+        {workspace === 'beat' && (
         <div className="preset-chips">
           <button
             type="button"
@@ -435,6 +458,7 @@ export function TransportBar({
             ★ Hardtechno „Stahlwerk“
           </button>
         </div>
+        )}
 
         <button
           type="button"

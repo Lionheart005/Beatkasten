@@ -40,6 +40,7 @@ const SOURCE_LABELS: Record<ModulationSourceType, string> = {
   'layer-pulse': 'Layer-Puls (Sidechain)',
   'macro-arc': 'Makro-Bogen',
   'drawn-curve': 'Gezeichnete Kurve',
+  external: 'Timeline-Keyframes',
 };
 
 const WAVE_OPTIONS: { value: WaveformType; label: string }[] = [

@@ -8,6 +8,10 @@ import {
 import { computeFullRepeatBars } from '../../core/engine/cycleMath';
 import type { BeatSnapshot, SectionItem } from '../../core/state/types';
 import type { BrowserFsAdapter } from '../../storage';
+import type { ArrangementDoc } from '../../core/arrangement/types';
+import type { ArrangementExportSpec } from '../../audio-host/ExportWorker';
+import { songEndBeat } from '../../core/arrangement/edit';
+import { TempoMap } from '../../core/arrangement/tempoMap';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -21,6 +25,12 @@ interface ExportModalProps {
   onStopPlayback?: () => Promise<void> | void;
   onClose: () => void;
   onNotice: (msg: string) => void;
+  /** Timeline document (export tab „Timeline“). */
+  arrangement?: ArrangementDoc | null;
+  /** PCM of all audio assets used by the timeline. */
+  getArrangementAssets?: () => Promise<NonNullable<ArrangementExportSpec['assets']>>;
+  /** Opened from the timeline workspace → preselect the timeline tab. */
+  preferTimeline?: boolean;
 }
 
 function triggerBrowserDownload(
@@ -54,8 +64,14 @@ export function ExportModal({
   onStopPlayback,
   onClose,
   onNotice,
+  arrangement = null,
+  getArrangementAssets,
+  preferTimeline = false,
 }: ExportModalProps) {
-  const [exportMode, setExportMode] = useState<'loop' | 'song'>('loop');
+  const [exportModeRaw, setExportMode] = useState<'loop' | 'song' | 'timeline' | null>(null);
+  const exportMode = exportModeRaw ?? (preferTimeline && arrangement ? 'timeline' : 'loop');
+  const [timelineRange, setTimelineRange] = useState<'song' | 'loop'>('song');
+  const [tailSeconds, setTailSeconds] = useState<number>(2);
   const [tailBars, setTailBars] = useState<number>(2);
   const [format, setFormat] = useState<ExportRequest['format']>('wav-24');
   const [bars, setBars] = useState<number>(8);
@@ -74,7 +90,18 @@ export function ExportModal({
     return sum + (Math.max(0, s.exportBars || 0) * bpb * 60) / Math.max(20, s.snapshot.tempoBpm);
   }, 0);
   const isSong = exportMode === 'song' && sections.length > 0;
-  const durationSec = isSong
+  const tlEnd = arrangement ? songEndBeat(arrangement) : 0;
+  const isTimeline = exportMode === 'timeline' && !!arrangement && tlEnd > 0;
+  const tlLoop = arrangement?.loop && arrangement.loop.endBeat > arrangement.loop.startBeat ? arrangement.loop : null;
+  const tlTempo = useMemo(
+    () => (arrangement ? new TempoMap(arrangement.tempoMarkers, arrangement.meterMarkers) : null),
+    [arrangement],
+  );
+  const tlStart = timelineRange === 'loop' && tlLoop ? tlLoop.startBeat : 0;
+  const tlStop = timelineRange === 'loop' && tlLoop ? tlLoop.endBeat : tlEnd;
+  const durationSec = isTimeline
+    ? (tlTempo ? tlTempo.beatToSec(tlStop) - tlTempo.beatToSec(tlStart) : 0) + tailSeconds
+    : isSong
     ? songSec
     : (bars * beatsPerBar * 60) / Math.max(20, snapshot.tempoBpm);
   const durationLabel = `${Math.floor(durationSec / 60)}:${String(
@@ -90,7 +117,20 @@ export function ExportModal({
 
     try {
       if (isPlaying && onStopPlayback) await onStopPlayback();
+      const poolAssets = getArrangementAssets ? await getArrangementAssets() : [];
+      const arrangementSpec: ArrangementExportSpec | undefined =
+        isTimeline && arrangement
+          ? {
+              doc: arrangement,
+              sections: sections.map((sec) => ({ id: sec.id, snapshot: sec.snapshot })),
+              startBeat: tlStart,
+              endBeat: tlStop,
+              tailSeconds,
+            }
+          : undefined;
       const request: ExportRequest = {
+        assets: poolAssets,
+        ...(arrangementSpec ? { arrangement: arrangementSpec } : {}),
         snapshot,
         bars,
         preRollBars,
@@ -167,7 +207,16 @@ export function ExportModal({
           <div className="preset-chips" style={{ flexWrap: 'wrap' }}>
             <button
               type="button"
-              className={`preset-chip${!isSong ? ' is-active' : ''}`}
+              className={`preset-chip${isTimeline ? ' is-active' : ''}`}
+              disabled={!arrangement || tlEnd <= 0}
+              title={!arrangement || tlEnd <= 0 ? 'Erst in der Timeline Clips anlegen' : 'Den Song genau so rendern, wie er in der Timeline klingt'}
+              onClick={() => setExportMode('timeline')}
+            >
+              Timeline
+            </button>
+            <button
+              type="button"
+              className={`preset-chip${!isSong && !isTimeline ? ' is-active' : ''}`}
               onClick={() => setExportMode('loop')}
             >
               Aktueller Beat (Loop)
@@ -186,6 +235,30 @@ export function ExportModal({
               Ganzer Song ({sections.length} Abschnitte · {songBars} Takte)
             </button>
           </div>
+
+          {isTimeline && (
+            <div className="muted-note" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="preset-chips">
+                <button type="button" className={`preset-chip${timelineRange === 'song' ? ' is-active' : ''}`} onClick={() => setTimelineRange('song')}>
+                  Ganzer Song
+                </button>
+                <button
+                  type="button"
+                  className={`preset-chip${timelineRange === 'loop' ? ' is-active' : ''}`}
+                  disabled={!tlLoop}
+                  onClick={() => setTimelineRange('loop')}
+                  title={tlLoop ? 'Nur den Loop-Bereich der Timeline' : 'In der Timeline erst einen Loop-Bereich setzen (Shift + Ziehen im Lineal)'}
+                >
+                  Loop-Bereich
+                </button>
+              </div>
+              <label style={{ fontSize: 12 }}>
+                Ausklang am Ende: {tailSeconds} s
+                <input type="range" min={0} max={10} step={0.5} value={tailSeconds} onChange={(e) => setTailSeconds(Number(e.target.value))} />
+              </label>
+              <span>Länge ≈ {durationLabel}. Stems = eine Datei pro Timeline-Spur (plus Gesamtmix).</span>
+            </div>
+          )}
 
           {isSong && (
             <div className="muted-note" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -244,7 +317,7 @@ export function ExportModal({
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: 10,
-              ...(isSong ? { opacity: 0.45, pointerEvents: 'none' as const } : {}),
+              ...(isSong || isTimeline ? { opacity: 0.45, pointerEvents: 'none' as const } : {}),
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -366,7 +439,9 @@ export function ExportModal({
             <Download size={14} />
             {isExporting
               ? 'Rendere Audio… (Wiedergabe pausiert)'
-              : isSong
+              : isTimeline
+                ? 'Timeline exportieren'
+                : isSong
                 ? 'Song exportieren'
                 : 'Jetzt exportieren'}
           </button>

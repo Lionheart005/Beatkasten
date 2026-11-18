@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { loadLayoutPref, saveLayoutPref, Splitter } from '../components/Splitter';
 import {
   ArrowDown,
@@ -226,6 +226,8 @@ interface LayerInspectorProps {
   onDeleteModulationRoute: (layerId: string, routeId: string) => void;
   onUpsertCurveLive: (curve: DrawnCurveData) => void;
   onCreateCurve: (preset?: DrawnCurveData) => DrawnCurveData;
+  /** Sample instrument: sound picker / editor (audio pool). */
+  renderSampleSection?: (layer: LayerConfig) => ReactNode;
 }
 
 const POLY_CYCLE_PRESETS: ReadonlyArray<{
@@ -265,6 +267,7 @@ export function LayerInspector({
   onDeleteModulationRoute,
   onUpsertCurveLive,
   onCreateCurve,
+  renderSampleSection,
 }: LayerInspectorProps) {
   // Breiten der drei Säulen (Anteile), per Maus veränderbar & gespeichert.
   const [colFr, setColFr] = useState<number[]>(() => {
@@ -850,6 +853,8 @@ export function LayerInspector({
                     Voice: {voiceModule.displayName}
                   </span>
                 </div>
+                {(voiceModule.id === 'sample-player' || layer.secondaryVoice?.moduleId === 'sample-player') &&
+                  renderSampleSection?.(layer)}
                 <GroupedSchemaControls
                   schemas={voiceModule.parameters}
                   values={layer.voice.params}

@@ -11,6 +11,7 @@ import {
   type ProcessorContext,
   type ProcessorInstance,
   type ProcessorModule,
+  type SampleSource,
   type TimeEvalContext,
   type TimeFrame,
   type TimeOperatorModule,
@@ -151,6 +152,17 @@ interface MutableProcessorContext {
  * 3. Applies click-free smoothed level and equal-power stereo panning
  */
 export class LayerEngine {
+  /** Timeline: per-clip keyframe override of the layer level / pan (NaN = none). */
+  public mixOverrideLevel = NaN;
+  public mixOverridePan = NaN;
+  /** Timeline clip tail: voices fade to silence, the card chain (reverb, echo) keeps running. */
+  public voicesSilenced = false;
+  private voiceGate = 1;
+  /** Sample bank (asset id → PCM) for sample-instrument voices. */
+  public sampleLookup: ((assetId: string) => SampleSource | undefined) | null = null;
+  private attachedSampleKey = '';
+  private attachedSecondaryKey = '';
+
   private sampleRate: number;
   public readonly maxBlockSize: number;
   public readonly bufL: Float32Array;
@@ -380,6 +392,29 @@ export class LayerEngine {
    * VoiceInstance and ProcessorInstances keyed by `card.id` so drag-and-drop
    * reordering produces zero audio resets or clicks.
    */
+  /** Hands the sample PCM / region to sample voices when it changed. */
+  public syncSamples(config: LayerConfig | null = this.config): void {
+    const sample = config?.sample;
+    const src = sample && this.sampleLookup ? this.sampleLookup(sample.assetId) : undefined;
+    const key = sample ? `${sample.assetId}|${src ? src.length : 0}|${JSON.stringify(sample)}` : '';
+    const inst = this.voiceInstance;
+    if (inst?.attachSample) {
+      const k = `${key}|${this.voiceModule?.id}`;
+      if (k !== this.attachedSampleKey) {
+        this.attachedSampleKey = k;
+        inst.attachSample(src ?? null, sample ?? null);
+      }
+    }
+    const sec = this.secondaryVoiceInstance;
+    if (sec?.attachSample) {
+      const k = `${key}|${this.secondaryVoiceModule?.id}`;
+      if (k !== this.attachedSecondaryKey) {
+        this.attachedSecondaryKey = k;
+        sec.attachSample(src ?? null, sample ?? null);
+      }
+    }
+  }
+
   public syncConfig(config: LayerConfig, registry: ModuleRegistry): void {
     this.config = config;
 
@@ -393,6 +428,7 @@ export class LayerEngine {
     } else if (this.voiceModule?.id !== nextVoiceMod.id || !this.voiceInstance) {
       this.voiceModule = nextVoiceMod;
       this.voiceInstance = nextVoiceMod.createInstance(this.sampleRate);
+      this.attachedSampleKey = '';
       this.voiceEffectiveParams = buildDefaultParams(nextVoiceMod);
       syncStaticParams(nextVoiceMod.parameters, config.voice.params, this.voiceEffectiveParams);
       this.voiceWasModulated = false;
@@ -417,6 +453,7 @@ export class LayerEngine {
     ) {
       this.secondaryVoiceModule = nextSecMod;
       this.secondaryVoiceInstance = nextSecMod.createInstance(this.sampleRate);
+      this.attachedSecondaryKey = '';
       this.secondaryVoiceEffectiveParams = buildDefaultParams(nextSecMod);
       syncStaticParams(
         nextSecMod.parameters,
@@ -435,6 +472,7 @@ export class LayerEngine {
 
     this.primaryIsBass = this.voiceModule?.category === 'bass';
     this.secondaryIsBass = this.secondaryVoiceModule?.category === 'bass';
+    this.syncSamples(config);
 
     // 1c. Pitch source (fixed single note vs. harmony)
     const pitch = config.pitch;
@@ -563,8 +601,10 @@ export class LayerEngine {
       return;
     }
 
-    const level = audible ? clamp(cfg.level, 0, 1.5) : 0;
-    const pan = clamp(cfg.pan, -1, 1);
+    const baseLevel = this.mixOverrideLevel === this.mixOverrideLevel ? this.mixOverrideLevel : cfg.level;
+    const basePan = this.mixOverridePan === this.mixOverridePan ? this.mixOverridePan : cfg.pan;
+    const level = audible ? clamp(baseLevel, 0, 1.5) : 0;
+    const pan = clamp(basePan, -1, 1);
     // Equal-power stereo pan law
     const panAngle = (pan + 1) * (Math.PI * 0.25);
     const targetGainL = level * Math.cos(panAngle);
@@ -784,6 +824,19 @@ export class LayerEngine {
 
       this.prevPulseTrigger = timeFrame.triggerIntensity;
 
+      // 3c. Clip tail: ramp the voices to silence (~5 ms) while the cards ring out.
+      const gateTarget = this.voicesSilenced ? 0 : 1;
+      if (this.voiceGate !== gateTarget || gateTarget === 0) {
+        const step = 1 / (0.005 * this.sampleRate);
+        let g = this.voiceGate;
+        for (let i = 0; i < subLen; i++) {
+          g = gateTarget > g ? Math.min(gateTarget, g + step) : Math.max(gateTarget, g - step);
+          subL[i] = subL[i]! * g;
+          subR[i] = subR[i]! * g;
+        }
+        this.voiceGate = g;
+      }
+
       // 4. Process dynamically ordered ProcessorChain (with modulated processor parameters)
       this.procCtx.sampleRate = this.sampleRate;
       this.procCtx.numSamples = subLen;
@@ -824,8 +877,8 @@ export class LayerEngine {
       let subTargetGainL = targetGainL;
       let subTargetGainR = targetGainR;
       if (hasMixMod) {
-        this.mixBaseParams.level = cfg.level;
-        this.mixBaseParams.pan = cfg.pan;
+        this.mixBaseParams.level = baseLevel;
+        this.mixBaseParams.pan = basePan;
         router.applyTargetModulation(
           cfg,
           'voice',
@@ -835,8 +888,8 @@ export class LayerEngine {
           this.mixBaseParams,
           this.mixEffectiveParams,
         );
-        const modLevel = clamp(this.mixEffectiveParams.level ?? cfg.level, 0, 1.5);
-        const modPan = clamp(this.mixEffectiveParams.pan ?? cfg.pan, -1, 1);
+        const modLevel = clamp(this.mixEffectiveParams.level ?? baseLevel, 0, 1.5);
+        const modPan = clamp(this.mixEffectiveParams.pan ?? basePan, -1, 1);
         const modPanAngle = (modPan + 1) * (HALF_PI * 0.5);
         subTargetGainL = modLevel * Math.cos(modPanAngle);
         subTargetGainR = modLevel * Math.sin(modPanAngle);

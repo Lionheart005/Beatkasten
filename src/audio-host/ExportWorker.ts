@@ -5,6 +5,9 @@ import {
   type SongChainPart,
 } from '../core/engine/OfflineRenderer';
 import { encodeMp3, encodeWav } from '../core/export';
+import { renderArrangement, sectionMapOf } from '../core/arrangement/renderArrangement';
+import type { AudioAssetData } from '../core/arrangement/ArrangementEngine';
+import type { ArrangementDoc } from '../core/arrangement/types';
 import type { BeatSnapshot } from '../core/state/types';
 import { sanitizeStorageName } from '../storage/ProjectStorageAdapter';
 
@@ -29,6 +32,24 @@ export interface ExportRequest {
   readonly songChain?: readonly SongChainPart[];
   /** Ausklang-Takte am Ende der Song-Kette. */
   readonly tailBars?: number;
+  /** Timeline-Export (hat Vorrang vor songChain / snapshot). */
+  readonly arrangement?: ArrangementExportSpec;
+  /** PCM des Audio-Pools (Sample-Instrument-Layer, Audio-Clips). */
+  readonly assets?: ArrangementExportSpec['assets'];
+}
+
+export interface ArrangementExportSpec {
+  readonly doc: ArrangementDoc;
+  readonly sections: ReadonlyArray<{ readonly id: string; readonly snapshot: BeatSnapshot }>;
+  readonly startBeat?: number;
+  readonly endBeat?: number;
+  readonly tailSeconds?: number;
+  readonly assets?: ReadonlyArray<{
+    readonly id: string;
+    readonly left: Float32Array;
+    readonly right: Float32Array;
+    readonly sampleRate: number;
+  }>;
 }
 
 export interface ExportedFile {
@@ -80,12 +101,68 @@ export function performExport(
   const sampleRate = request.sampleRate ?? 48000;
   const bars = request.bars;
   const preRollBars = request.preRollBars;
+  const poolMap = new Map<string, AudioAssetData>();
+  for (const a of [...(request.assets ?? []), ...(request.arrangement?.assets ?? [])]) {
+    poolMap.set(a.id, { left: a.left, right: a.right, sampleRate: a.sampleRate, length: Math.min(a.left.length, a.right.length) });
+  }
+  const sampleBank = (id: string) => poolMap.get(id);
+
+  if (request.arrangement) {
+    const spec = request.arrangement;
+    const sections = sectionMapOf(spec.sections);
+    const assetMap = poolMap;
+    const opts = {
+      sampleRate,
+      startBeat: spec.startBeat,
+      endBeat: spec.endBeat,
+      tailSeconds: spec.tailSeconds ?? 2,
+      assets: (id: string) => assetMap.get(id),
+    };
+    const mix = renderArrangement(spec.doc, sections, opts);
+    const isMp3 = request.format === 'mp3-192' || request.format === 'mp3-320';
+    if (isMp3) {
+      const kbps = request.format === 'mp3-320' ? 320 : 192;
+      return {
+        mainFile: {
+          fileName: `${safeBase}_timeline.mp3`,
+          bytes: encodeMp3(mix.left, mix.right, mix.sampleRate, kbps),
+          mimeType: 'audio/mpeg',
+        },
+        durationSeconds: mix.durationSeconds,
+      };
+    }
+    const bitDepth: 16 | 24 = request.format === 'wav-24' || request.format === 'stems-wav-24' ? 24 : 16;
+    const isStems = request.format === 'stems-wav-16' || request.format === 'stems-wav-24';
+    const stemFiles: ExportedStemFile[] = [];
+    if (isStems) {
+      spec.doc.tracks.forEach((track, idx) => {
+        if (track.clips.length === 0) return;
+        const stem = renderArrangement(spec.doc, sections, { ...opts, soloTrackId: track.id });
+        stemFiles.push({
+          layerId: track.id,
+          layerName: track.name,
+          fileName: `${safeBase}_spur_${String(idx + 1).padStart(2, '0')}_${sanitizeStorageName(track.name, track.id)}.wav`,
+          bytes: encodeWav(stem.left, stem.right, stem.sampleRate, bitDepth),
+        });
+      });
+    }
+    return {
+      mainFile: {
+        fileName: `${safeBase}_timeline${isStems ? '_mix' : ''}.wav`,
+        bytes: encodeWav(mix.left, mix.right, mix.sampleRate, bitDepth),
+        mimeType: 'audio/wav',
+      },
+      ...(isStems ? { stemFiles } : {}),
+      durationSeconds: mix.durationSeconds,
+    };
+  }
 
   if (request.songChain && request.songChain.length > 0) {
     const rendered = renderSongChain(request.songChain, {
       sampleRate,
       preRollBars,
       tailBars: request.tailBars ?? 2,
+      sampleBank,
     });
     const isMp3 = request.format === 'mp3-192' || request.format === 'mp3-320';
     if (isMp3) {
@@ -119,6 +196,7 @@ export function performExport(
         sampleRate,
         bars,
         preRollBars,
+        sampleBank,
       });
       const bytes = encodeWav(
         rendered.left,
@@ -143,6 +221,7 @@ export function performExport(
         sampleRate,
         bars,
         preRollBars,
+        sampleBank,
       });
       const bytes = encodeMp3(
         rendered.left,
@@ -167,6 +246,7 @@ export function performExport(
         sampleRate,
         bars,
         preRollBars,
+        sampleBank,
       });
       const mixBytes = encodeWav(
         stemRender.mix.left,
