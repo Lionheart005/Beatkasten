@@ -9,7 +9,7 @@
 Alle Domänen- und Audio-Berechnungen sind strikt von Browser-APIs (`window`, `document`, `AudioWorkletGlobalScope`) und React getrennt. Für reibungsloses `AudioWorklet`-Bundling in Vite und volle Windows-Kompatibilität nutzen wir eine schlanke Single-Root-Struktur mit strikten Modul-Grenzen (`src/core` darf nichts aus `ui`, `storage` oder `audio-host` importieren):
 
 ```text
-TechnoSoundGenerator/
+Beatkasten/
 ├── .plans/                         # Architektur- & Fortschrittsdokumentation
 ├── src/
 │   ├── core/                       # [100% Pure TypeScript — ZERO DOM/Browser Imports!]

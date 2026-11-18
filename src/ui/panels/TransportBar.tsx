@@ -111,7 +111,7 @@ export function TransportBar({
         <div className="brand-badge">
           <span className="brand-dot" />
           <div>
-            <div className="brand-title">Techno Wellen-Generator</div>
+            <div className="brand-title">Beatkasten</div>
             <div className="brand-sub">{projectName}</div>
           </div>
         </div>

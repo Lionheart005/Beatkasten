@@ -6,6 +6,7 @@ import {
   type ProjectSummary,
 } from './ProjectStorageAdapter';
 
+// Interner DB-Name bleibt absichtlich der alte, damit gespeicherte Projekte erhalten bleiben.
 const DB_NAME = 'techno-sound-generator-db';
 const DB_VERSION = 2;
 const STORE_PROJECTS = 'projects';

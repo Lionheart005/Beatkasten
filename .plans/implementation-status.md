@@ -1,4 +1,4 @@
-# TechnoSoundGenerator — Umsetzungs- & Übergabeplan (`/delegate`)
+# Beatkasten — Umsetzungs- & Übergabeplan (`/delegate`)
 
 ## 1. Ziel & Kontext
 - Vollständige Umsetzung des modularen, timeline-freien Techno-Beat- & Klangstruktur-Generators auf Basis der Pläne [`00-overview-and-vision.md`](./00-overview-and-vision.md) bis [`04-testing-and-roadmap.md`](./04-testing-and-roadmap.md).
