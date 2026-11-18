@@ -2,12 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Copy, CopyPlus, Music, Ruler, Trash2, X } from 'lucide-react';
 import type { LiveTelemetry } from '../../audio-host';
 import type { BeatSnapshot } from '../../core/state/types';
-import {
-  CHORD_CATEGORY_LABELS,
-  CHORD_PRESETS,
-  PROGRESSION_PRESETS,
-  type ChordCategory,
-} from '../../core/theory/harmony';
+import { PROGRESSION_PRESETS } from '../../core/theory/harmony';
 import {
   getHeptatonicIntervals,
   NOTE_NAMES,
@@ -16,25 +11,28 @@ import {
 import {
   BASS_MODE_LABELS,
   buildHarmonyTimeline,
+  DIATONIC_TRIAD,
   findStepIndexAtBeat,
   MAX_CUSTOM_STEPS,
   MAX_STEP_BEATS,
   midiToNoteLabel,
   MIN_STEP_BEATS,
+  offsetToDegree,
   presetToCustomSteps,
   previewDegreeChord,
   type BassMode,
   type ChordStepConfig,
   type ChordTransitionType,
 } from '../../core/theory/progression';
+import { getClassicalTemplate } from '../../core/theory/classicalChords';
 import {
-  CLASSICAL_TEMPLATES,
-  resolveClassicalTemplate,
-  type ClassicalTemplateId,
-} from '../../core/theory/classicalChords';
+  buildChordMenu,
+  chordFunctionSymbol,
+  findChordMenuOption,
+  groupChordMenu,
+  type ChordMenuOption,
+} from '../../core/theory/chordMenu';
 import { nextUiId } from '../store/useStudioStore';
-
-const PALETTE_TEMPLATES = Object.values(CLASSICAL_TEMPLATES).filter((t) => t.inPalette);
 
 interface HarmonyBuilderPanelProps {
   snapshot: BeatSnapshot;
@@ -104,8 +102,7 @@ export function HarmonyBuilderPanel({
     [harmony, beatsPerBar],
   );
 
-  // Colour + length used for newly appended chords.
-  const [newChordType, setNewChordType] = useState<string>('auto');
+  // Length used for newly appended chords (they are plain diatonic triads).
   const [newDuration, setNewDuration] = useState<number>(beatsPerBar);
 
   // Playhead highlight: only re-render when the active chord changes.
@@ -146,30 +143,37 @@ export function HarmonyBuilderPanel({
     commitSteps(next, label);
   };
 
-  const templateFields = (id: ClassicalTemplateId): Partial<ChordStepConfig> => {
-    const r = resolveClassicalTemplate(id, harmony.scaleId);
-    return {
-      degree: r.degree,
-      accidental: r.accidental,
-      chordType: r.chordType,
-      bass: r.bass,
-      templateId: id,
+  // Combined "function + chord" menu per root (cached while the key stays the same).
+  const menuFor = useMemo(() => {
+    const cache = new Map<string, ChordMenuOption[]>();
+    const h = { ...harmony };
+    return (degree: number, accidental: -1 | 0 | 1): ChordMenuOption[] => {
+      const key = `${degree}|${accidental}`;
+      let menu = cache.get(key);
+      if (!menu) {
+        menu = buildChordMenu(h, { degree, accidental });
+        cache.set(key, menu);
+      }
+      return menu;
     };
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [harmony.rootNote, harmony.scaleId, harmony.chordPreset]);
 
-  const appendTemplate = (id: ClassicalTemplateId) => {
-    if (customSteps.length >= MAX_CUSTOM_STEPS) return;
-    const step: ChordStepConfig = {
-      id: nextUiId('chord'),
-      degree: 0,
-      accidental: 0,
-      chordType: 'auto',
-      durationBeats: newDuration,
-      transitionType: 'cut',
-      transitionBeats: 0,
-      ...templateFields(id),
+  const applyMenuOption = (idx: number, cfg: ChordStepConfig, opt: ChordMenuOption | undefined) => {
+    if (!opt) return;
+    const f = opt.fields;
+    const prevTpl = getClassicalTemplate(cfg.templateId);
+    // A template's special bass (N⁶ = third in the bass) goes away with the template.
+    const resetBass =
+      !f.templateId && prevTpl?.bass && prevTpl.bass !== 'root' && (cfg.bass ?? 'root') === prevTpl.bass;
+    const patch: Partial<ChordStepConfig> = {
+      degree: f.degree,
+      accidental: f.accidental,
+      chordType: f.chordType,
+      ...(f.templateId ? { templateId: f.templateId, bass: f.bass ?? 'root' } : {}),
+      ...(resetBass ? { bass: 'root' as const } : {}),
     };
-    commitSteps([...customSteps, step], `Akkord hinzugefügt: ${CLASSICAL_TEMPLATES[id].label}`);
+    updateStep(idx, patch, `Akkord: ${opt.label}`);
   };
 
   const appendStep = (degree: number, accidental: -1 | 0 | 1) => {
@@ -180,12 +184,12 @@ export function HarmonyBuilderPanel({
       id: nextUiId('chord'),
       degree,
       accidental,
-      chordType: newChordType,
+      chordType: DIATONIC_TRIAD,
       durationBeats: newDuration,
       transitionType: 'cut',
       transitionBeats: 0,
     };
-    const preview = previewDegreeChord(harmony, degree, accidental, newChordType);
+    const preview = previewDegreeChord(harmony, degree, accidental, DIATONIC_TRIAD);
     commitSteps([...base, step], `Akkord hinzugefügt: ${preview.roman} ${preview.name}`);
   };
 
@@ -374,24 +378,6 @@ export function HarmonyBuilderPanel({
       <div className="degree-bar">
         <span className="muted-note">Neue Akkorde:</span>
         <select
-          value={newChordType}
-          onChange={(e) => setNewChordType(e.target.value)}
-          title="Akkord-Farbe, mit der die Stufen-Knöpfe neue Akkorde anhängen (z. B. Übermäßig)"
-        >
-          <option value="auto">Farbe: Auto (leitereigen)</option>
-          {(Object.keys(CHORD_CATEGORY_LABELS) as ChordCategory[]).map((cat) => (
-            <optgroup key={cat} label={CHORD_CATEGORY_LABELS[cat]}>
-              {Object.values(CHORD_PRESETS)
-                .filter((c) => c.category === cat)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </select>
-        <select
           value={NEW_LENGTH_OPTIONS.includes(newDuration) ? newDuration : 'custom'}
           onChange={(e) => {
             const v = Number(e.target.value);
@@ -421,9 +407,15 @@ export function HarmonyBuilderPanel({
             if (Number.isFinite(v)) setNewDuration(Math.max(MIN_STEP_BEATS, Math.min(MAX_STEP_BEATS, v)));
           }}
         />
-        <span className="muted-note" style={{ marginLeft: 6 }}>Stufe anhängen:</span>
+        <span
+          className="muted-note"
+          style={{ marginLeft: 6 }}
+          title="Hängt den leitereigenen Dreiklang an. Septimen, Sexten, klassische Akkorde usw. danach im Akkord-Menü der Kachel auswählen."
+        >
+          Dreiklang anhängen:
+        </span>
         {QUICK_BUTTONS.map(({ degree, accidental }) => {
-          const p = previewDegreeChord(harmony, degree, accidental, newChordType);
+          const p = previewDegreeChord(harmony, degree, accidental, DIATONIC_TRIAD);
           return (
             <button
               key={`${accidental}${degree}`}
@@ -438,27 +430,6 @@ export function HarmonyBuilderPanel({
               }
             >
               <span className="degree-roman">{p.roman}</span>
-              <span className="degree-name">{p.name}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="degree-bar">
-        <span className="muted-note">Klassisch:</span>
-        {PALETTE_TEMPLATES.map((tpl) => {
-          const r = resolveClassicalTemplate(tpl.id, harmony.scaleId);
-          const p = previewDegreeChord(harmony, r.degree, r.accidental, r.chordType);
-          return (
-            <button
-              key={tpl.id}
-              type="button"
-              className="degree-btn is-classical"
-              disabled={customSteps.length >= MAX_CUSTOM_STEPS}
-              onClick={() => appendTemplate(tpl.id)}
-              title={`${tpl.label} (${p.name}): ${tpl.hint}`}
-            >
-              <span className="degree-roman">{tpl.symbol}</span>
               <span className="degree-name">{p.name}</span>
             </button>
           );
@@ -522,6 +493,14 @@ export function HarmonyBuilderPanel({
           const cfg = isCustom ? customSteps[idx] : undefined;
           const isActive = idx === activeIdx;
           const voicing = st.frame.chordNotesMidi.map(midiToNoteLabel).join(' · ');
+          const rootDeg = cfg
+            ? { degree: cfg.degree, accidental: cfg.accidental }
+            : offsetToDegree(harmony.scaleId, st.rootOffset);
+          const fnLabel =
+            st.functionLabel ??
+            (st.parallelScale
+              ? null
+              : chordFunctionSymbol(harmony.scaleId, rootDeg.degree, rootDeg.accidental, st.intervals));
           return (
             <div
               key={cfg?.id ?? `preset-${idx}`}
@@ -530,7 +509,7 @@ export function HarmonyBuilderPanel({
               <div className="chord-step-head">
                 <span className="chord-step-label">
                   <span className="chord-step-index">#{idx + 1}</span>{' '}
-                  {st.functionLabel && <span className="chord-step-fn">{st.functionLabel}</span>}{' '}
+                  {fnLabel && <span className="chord-step-fn">{fnLabel}</span>}{' '}
                   <b>{st.degreeLabel}</b> · {st.chordName}
                 </span>
                 {cfg && (
@@ -614,7 +593,7 @@ export function HarmonyBuilderPanel({
                       onChange={(e) =>
                         updateStep(idx, { degree: Number(e.target.value) }, 'Stufe geändert')
                       }
-                      title="Skalenstufe"
+                      title="Grundton (Skalenstufe) – die Akkord-Farbe bleibt erhalten"
                     >
                       {ROMAN.map((r, d) => (
                         <option key={r} value={d}>
@@ -622,62 +601,42 @@ export function HarmonyBuilderPanel({
                         </option>
                       ))}
                     </select>
-                    <select
-                      value={cfg.chordType}
-                      onChange={(e) =>
-                        updateStep(idx, { chordType: e.target.value }, 'Akkord-Farbe geändert')
-                      }
-                      title="Akkord-Farbe (Auto = leitereigen in der globalen Akkord-Farbe)"
-                      style={{ flex: 1, minWidth: 0 }}
-                    >
-                      <option value="auto">Auto (leitereigen)</option>
-                      {(Object.keys(CHORD_CATEGORY_LABELS) as ChordCategory[]).map((cat) => (
-                        <optgroup key={cat} label={CHORD_CATEGORY_LABELS[cat]}>
-                          {Object.values(CHORD_PRESETS)
-                            .filter((c) => c.category === cat)
-                            .map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.label}
-                              </option>
-                            ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="chord-step-fields">
-                    <select
-                      value={cfg.templateId ?? ''}
-                      onChange={(e) => {
-                        const id = e.target.value as ClassicalTemplateId | '';
-                        if (!id) {
-                          // Keep the chord as it sounds now, just without the template.
-                          const frozen = cfg.templateId
-                            ? templateFields(cfg.templateId as ClassicalTemplateId)
-                            : {};
-                          updateStep(
-                            idx,
-                            {
-                              degree: frozen.degree ?? cfg.degree,
-                              accidental: frozen.accidental ?? cfg.accidental,
-                              chordType: frozen.chordType ?? cfg.chordType,
-                            },
-                            'Funktion gelöst',
-                          );
-                          return;
-                        }
-                        updateStep(idx, templateFields(id), `Funktion: ${CLASSICAL_TEMPLATES[id].label}`);
-                      }}
-                      title="Klassische Funktion: setzt Stufe, Farbe und Bass passend zur Tonart"
-                      style={{ flex: 1, minWidth: 0 }}
-                    >
-                      <option value="">Funktion: frei</option>
-                      {PALETTE_TEMPLATES.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.symbol} · {tpl.label}
-                        </option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const menu = menuFor(cfg.degree, cfg.accidental);
+                      const selected = findChordMenuOption(menu, harmony, cfg);
+                      return (
+                        <select
+                          className="chord-menu-select"
+                          value={selected?.key ?? '__current'}
+                          onChange={(e) =>
+                            applyMenuOption(idx, cfg, menu.find((o) => o.key === e.target.value))
+                          }
+                          title={
+                            selected?.hint ??
+                            'Funktion & Akkord – nach Funktion sortiert, oben die einfachen leitereigenen Dreiklänge, je mehr Zusatztöne desto weiter unten'
+                          }
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          {!selected && (
+                            <option value="__current">
+                              {fnLabel ?? st.degreeLabel} · {st.chordName.split('/')[0]}
+                            </option>
+                          )}
+                          {groupChordMenu(menu).map((g) => (
+                            <optgroup
+                              key={g.group}
+                              label={g.group === 'colours' ? `${g.label} (${ROMAN[cfg.degree] ?? ''}${cfg.accidental === -1 ? ' b' : cfg.accidental === 1 ? ' #' : ''})` : g.label}
+                            >
+                              {g.options.map((o) => (
+                                <option key={o.key} value={o.key} title={o.hint}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
 
                   <div className="chord-bass-row">

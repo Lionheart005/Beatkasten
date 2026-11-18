@@ -1,3 +1,6 @@
 timeline:
 Einstellungen wie Lautstärke und Pan der gesammten spur auch in den spur einstellungen, außerdem den wert anzeigen als zahl. 
 
+die klassischen akkorde bitte nicht direkt unter den stufen vom akkord baukasten, sondern nur als auswahl im dropdown menü der einzelnen kacheln. auch die stufen die es bis jetzt gibt bitte ohne 7 oder andere extra töne sondern ganz simpel leitereigene dreiklänge als standard und im dprodown menü kann man sich dann selber raussuchen was man will.
+
+außerdem macht es für mich nicht so viel sinn funktion und akkord voneinander zu trennen, sondern für jede mögliche auswahl im dropdown wird angezeigt funktion und harmonie. die auswahl ist aber nach funktionen sortiert und je mehr akkordfremde töne desto weiter unten. 

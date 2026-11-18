@@ -42,7 +42,10 @@ export interface ChordStepConfig {
   readonly degree: number;
   /** -1 = b, 0 = natural, +1 = # */
   readonly accidental: -1 | 0 | 1;
-  /** ChordPresetId or 'auto' (diatonic chord in the global colour). */
+  /**
+   * ChordPresetId, 'triad' (plain diatonic triad, follows the scale) or
+   * 'auto' (diatonic chord in the global colour).
+   */
   readonly chordType: string;
   readonly durationBeats: number;
   readonly transitionType: ChordTransitionType;
@@ -162,6 +165,9 @@ function alteredAutoChord(accidental: -1 | 1, count: 3 | 4 | 5, degree: number):
   return [...(count === 5 ? CHORD_PRESETS.maj9 : CHORD_PRESETS.maj7).intervals];
 }
 
+/** Chord type of a plain diatonic triad (independent of the global chord colour). */
+export const DIATONIC_TRIAD = 'triad';
+
 export function resolveStepIntervals(
   scaleId: string,
   globalChord: string,
@@ -171,6 +177,12 @@ export function resolveStepIntervals(
 ): number[] {
   if (chordType !== 'auto' && isChordPresetId(chordType)) {
     return [...CHORD_PRESETS[chordType].intervals];
+  }
+  if (chordType === DIATONIC_TRIAD) {
+    // Borrowed (b) roots are major, raised (#) roots diminished.
+    if (accidental === 1) return [...CHORD_PRESETS.dim.intervals];
+    if (accidental === -1) return [...CHORD_PRESETS.major.intervals];
+    return getDiatonicChordIntervals(scaleId, degree, 3);
   }
   const count = autoNoteCount(globalChord);
   if (count === null) return [...getChordPreset(globalChord).intervals];

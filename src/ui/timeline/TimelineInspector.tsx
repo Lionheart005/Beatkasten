@@ -266,6 +266,7 @@ function ClipInspector({
                     onCommit={() => arr.commitPreview(`${layer.name}: Pegel`)}
                     onDoubleClick={() => setOv({ level: undefined }, 'commit', `${layer.name}: Pegel wie Abschnitt`)}
                   />
+                  <span className={`tl-layer-value${ov.level !== undefined ? ' is-own' : ''}`}>{formatPercent(level)}</span>
                   <LiveRange
                     min={-1}
                     max={1}
@@ -277,6 +278,7 @@ function ClipInspector({
                     onCommit={() => arr.commitPreview(`${layer.name}: Pan`)}
                     onDoubleClick={() => setOv({ pan: undefined }, 'commit', `${layer.name}: Pan wie Abschnitt`)}
                   />
+                  <span className={`tl-layer-value${ov.pan !== undefined ? ' is-own' : ''}`}>{formatPan(pan)}</span>
                   <button
                     type="button"
                     className={`tl-auto-btn${laneLevel ? ' is-active' : ''}`}
@@ -397,6 +399,51 @@ function TrackInspector({ arr, doc, trackId, onAddLane, onFreezeTrack }: Inspect
             onLive={(v) => arr.preview((b) => updateTrack(b, track.id, { heightPx: v }))}
             onCommit={() => arr.commitPreview('Spurhöhe')}
           />
+          <span className="schema-value">{track.heightPx ?? 62} px</span>
+        </label>
+        <label className="tl-field">
+          <span>Lautstärke</span>
+          <LiveRange
+            min={0}
+            max={1.5}
+            value={track.level}
+            accent={track.color}
+            title="Pegel der ganzen Spur (Doppelklick = 100 %)"
+            onLive={(v) => arr.preview((b) => updateTrack(b, track.id, { level: v }))}
+            onCommit={() => arr.commitPreview('Spur-Pegel')}
+            onDoubleClick={() => arr.commit((d) => updateTrack(d, track.id, { level: 1 }), 'Spur-Pegel zurückgesetzt')}
+          />
+          <span className="schema-value">{formatPercent(track.level)}</span>
+          <button
+            type="button"
+            className={`tl-auto-btn${findLane(doc, { scope: 'track', trackId: track.id, param: 'level' }) ? ' is-active' : ''}`}
+            onClick={() => onAddLane({ scope: 'track', trackId: track.id, param: 'level' }, `${track.name} · Pegel`, track.level)}
+            title="Spur-Pegel mit Keyframes steuern"
+          >
+            <Spline size={10} />
+          </button>
+        </label>
+        <label className="tl-field">
+          <span>Pan</span>
+          <LiveRange
+            min={-1}
+            max={1}
+            value={track.pan}
+            accent={track.color}
+            title="Stereo-Position der ganzen Spur (Doppelklick = Mitte)"
+            onLive={(v) => arr.preview((b) => updateTrack(b, track.id, { pan: v }))}
+            onCommit={() => arr.commitPreview('Spur-Pan')}
+            onDoubleClick={() => arr.commit((d) => updateTrack(d, track.id, { pan: 0 }), 'Spur-Pan Mitte')}
+          />
+          <span className="schema-value">{formatPan(track.pan)}</span>
+          <button
+            type="button"
+            className={`tl-auto-btn${findLane(doc, { scope: 'track', trackId: track.id, param: 'pan' }) ? ' is-active' : ''}`}
+            onClick={() => onAddLane({ scope: 'track', trackId: track.id, param: 'pan' }, `${track.name} · Pan`, track.pan)}
+            title="Spur-Pan mit Keyframes steuern"
+          >
+            <Spline size={10} />
+          </button>
         </label>
         <div className="muted-note">
           {track.kind === 'audio' ? 'Audio-Spur: Aufnahmen und Dateien.' : 'Abschnitts-Spur: Clips verweisen live auf Abschnitte des Beatkastens.'}

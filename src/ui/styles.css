@@ -1091,10 +1091,6 @@ button.btn-attention {
   border-color: rgba(168, 85, 247, 0.55);
 }
 
-.degree-btn.is-classical {
-  border-color: rgba(245, 158, 11, 0.5);
-}
-
 .chord-step-fn {
   display: inline-block;
   padding: 0 4px;
@@ -2096,6 +2092,19 @@ button.btn-attention {
 .tl-layer-row.is-off .tl-layer-name {
   opacity: 0.45;
   text-decoration: line-through;
+}
+
+.tl-layer-value {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  min-width: 42px;
+  white-space: nowrap;
+}
+
+.tl-layer-value.is-own {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .tl-layer-dot {

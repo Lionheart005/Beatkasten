@@ -121,3 +121,6 @@
 - [x] Phase E: Aufnahme mit Vorzähler, Metronom, Takes, Latenz-Ausgleich + Messung, Mithören.
 - [x] Phase F: Sample-Instrument (4 Spielweisen) + Sample-Editor in beiden Workspaces.
 - Tests: **123/124** (einzige Ausnahme: grenzwertiges Performance-Budget, s. Plan 12 §8), `tsc` ✓, `vite build` ✓. **Offen:** Browser-Check und Hörtest durch den Nutzer.
+
+## Runde 7 (18.11.2026) — Akkord-Menü & Spur-Pegel
+Siehe `13-akkordmenue-und-spur-pegel.md`. Neues Modul `src/core/theory/chordMenu.ts`, Akkordtyp `triad` (`DIATONIC_TRIAD`), Baukasten-Kacheln mit kombiniertem „Funktion · Akkord“-Menü, Klassisch-Chips entfernt, Spur-Lautstärke/Pan im Timeline-Inspektor mit Zahlen.

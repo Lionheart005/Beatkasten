@@ -4,3 +4,4 @@ export * from './cycles';
 export * from './voiceLeading';
 export * from './progression';
 export * from './classicalChords';
+export * from './chordMenu';
