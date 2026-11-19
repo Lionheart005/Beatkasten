@@ -15,3 +15,5 @@ Zwei Workspaces, zwischen denen man oben hin und her schaltet:
   ![Timeline-Workspace](docs/images/timeline.png)
 
 Es ist sehr simpel neue Instrumente und Effekte hinzuzufügen von der Code Architektur, ich freu mich über jede Erweiterung.
+
+Lizenz: [MIT](LICENSE)
